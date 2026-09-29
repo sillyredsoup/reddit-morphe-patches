@@ -252,6 +252,34 @@ public final class VerticalHomeFeedPatch {
                         seedHooks++;
                     }
                     if (seedHooks != 1) throw new IllegalStateException("Full bleed initial loader changed: " + seedHooks);
+
+                    MutableMethod viewState = one(context.mutableClassDefBy(
+                        "Lcom/reddit/fullbleedplayer/ui/FullBleedViewModel;"),
+                        "L", "Ljava/lang/Object;", 1);
+                    MutableMethodImplementation viewImpl = viewState.getImplementation();
+                    List<Instruction> viewCode = new ArrayList<>(viewImpl.getInstructions());
+                    int viewHooks = 0;
+                    for (int i = viewCode.size() - 1; i >= 0; i--) {
+                        Instruction ins = viewCode.get(i);
+                        if (ins.getOpcode() != Opcode.RETURN_OBJECT) continue;
+                        int state = ((OneRegisterInstruction) ins).getRegisterA();
+                        int self = viewImpl.getRegisterCount() - 2;
+                        if (self < 2) throw new IllegalStateException("No view state scratch registers");
+                        viewImpl.replaceInstruction(i,
+                            new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 0, self));
+                        viewImpl.addInstruction(i + 1,
+                            new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 1, state));
+                        viewImpl.addInstruction(i + 2,
+                            new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, 0, 2,
+                                ref("verticalViewState", Arrays.asList("Ljava/lang/Object;",
+                                    "Ljava/lang/Object;"), "Ljava/lang/Object;")));
+                        viewImpl.addInstruction(i + 3,
+                            new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, state));
+                        viewImpl.addInstruction(i + 4,
+                            new BuilderInstruction11x(Opcode.RETURN_OBJECT, state));
+                        viewHooks++;
+                    }
+                    if (viewHooks != 1) throw new IllegalStateException("Full bleed view state changed: " + viewHooks);
                     return Unit.INSTANCE;
                 });
                 return Unit.INSTANCE;

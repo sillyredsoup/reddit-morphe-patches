@@ -359,6 +359,28 @@ public final class VerticalHomeFeed {
         } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
     }
 
+    /** Select Reddit's existing vertical pager for this Home media session. */
+    public static Object verticalViewState(Object viewModel, Object state) {
+        try {
+            Object params = field(viewModel, "g");
+            Object data = field(params, "d");
+            if (!MARKER.equals(field(data, "a"))) return state;
+            Object current = field(state, "g");
+            if (!"Horizontal".equals(String.valueOf(current))) return state;
+            @SuppressWarnings({"unchecked", "rawtypes"}) Object vertical =
+                Enum.valueOf((Class) current.getClass(), "Vertical");
+            Object[] values = new Object[15];
+            for (int i = 0; i < values.length; i++)
+                values[i] = field(state, String.valueOf((char) ('a' + i)));
+            values[6] = vertical;
+            for (Constructor<?> constructor : state.getClass().getConstructors()) {
+                if (constructor.getParameterCount() == values.length)
+                    return constructor.newInstance(values);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) { }
+        return state;
+    }
+
     private static Object kotlinUnit() {
         try {
             Class<?> type = Class.forName("kotlin.Unit");

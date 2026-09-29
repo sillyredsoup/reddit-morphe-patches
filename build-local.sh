@@ -16,7 +16,7 @@ javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/reddit-api" \
     "$repo_dir"/build-support/reddit-api/kotlin/coroutines/jvm/internal/*.java
 javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/patch-classes" "$repo_dir"/patches/src/main/java/local/reddit/*.java
 java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 28 --lib "$ANDROID_JAR" --classpath "$MORPHE_DESKTOP_JAR" --output "$build_dir/patch-dex" "$build_dir"/patch-classes/local/reddit/*.class
-for extension in RedditMode AppPostFilter; do
+for extension in RedditMode AppPostFilter VerticalHomeFeed; do
     extension_dir="$build_dir/$extension"
     mkdir -p "$extension_dir/classes" "$extension_dir/dex"
     javac -cp "$build_dir/reddit-api:$MORPHE_DESKTOP_JAR:$ANDROID_JAR" -d "$extension_dir/classes" "$repo_dir/extensions/extension/src/main/java/local/reddit/extension/$extension.java"
@@ -26,12 +26,13 @@ cp -R "$build_dir/patch-classes/." "$build_dir/bundle/"
 cp "$build_dir/patch-dex/classes.dex" "$build_dir/bundle/classes.dex"
 cp "$build_dir/RedditMode/dex/classes.dex" "$build_dir/bundle/extensions/reddit-mode.mpe"
 cp "$build_dir/AppPostFilter/dex/classes.dex" "$build_dir/bundle/extensions/hide-app-posts.mpe"
+cp "$build_dir/VerticalHomeFeed/dex/classes.dex" "$build_dir/bundle/extensions/vertical-home-feed.mpe"
 cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
-Description: Independent app post filter and NSFW bottom bar mode
-Version: 0.2.6
-Timestamp: 1790695489000
+Description: Independent app post filter, NSFW mode, and vertical home feed
+Version: 0.3.0
+Timestamp: 1790699861000
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

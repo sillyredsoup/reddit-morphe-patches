@@ -1,15 +1,16 @@
 # Reddit patches for Morphe
 
-These two independent patches target Reddit 2026.14.0:
+These three independent patches target Reddit 2026.14.0:
 
 - **Reddit - Hide app posts** hides Reddit Dev Platform games and apps in listings. It adds a **Hide games in feed** switch under Reddit's Morphe settings → Feed. The switch defaults to on and applies to newly loaded listings. This patch requires the upstream Morphe settings patch for the switch.
 - **Reddit - NSFW mode** uses the Inbox slot for an NSFW button in the bottom bar. It keeps the Inbox icon; the Home and Games buttons stay in place. Turning it on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and shows only non-NSFW posts. Toggling updates visible posts and refreshes the current feed without restarting the screen.
+- **Reddit - Vertical home feed** adds a **Vertical feed** button over the Home feed. It opens Reddit's post viewer with vertical swipes and uses the posts already loaded in Home, in their current order. It stops at the end of that loaded set; scroll Home first to load more posts before opening it. Normal post taps retain Reddit's behavior. This patch is experimental until tested in the app.
 
 Add the GitHub source in Morphe Manager:
 
 https://morphe.software/add-source?github=sillyredsoup/reddit-morphe-patches
 
-In Expert mode, select both this source and the built-in Morphe source. Select either or both patches here, then select the upstream Reddit patches you want. **Hide navigation buttons** with **Hide Games** can be used alongside the NSFW button.
+In Expert mode, select both this source and the built-in Morphe source. Select the patches you want here, then select the upstream Reddit patches you want. **Hide navigation buttons** with **Hide Games** can be used alongside the NSFW button.
 
 If you used version 0.1.x, select the two new patch names explicitly. Morphe does not carry the old combined patch selection over to them.
 
@@ -19,4 +20,4 @@ Run `./build-local.sh` to build `reddit-mode.mpp` with public build tools. The b
 
 ## Verification
 
-Morphe Desktop discovers both patches and applies them together with the upstream Reddit patches to the 2026.14.0 APKM. The app post filter still needs longer device testing.
+Morphe Desktop discovers all three patches and applies them together with the upstream **Hide ads** and **Hide navigation buttons** patches to the 2026.14.0 APKM. The vertical viewer still needs device testing.

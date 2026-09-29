@@ -283,6 +283,35 @@ public final class VerticalHomeFeedPatch {
                     }
                     if (seedHooks != 1) throw new IllegalStateException("Full bleed initial loader changed: " + seedHooks);
 
+                    MutableMethod chrome = one(context.mutableClassDefBy(
+                        "Lcom/reddit/fullbleedplayer/data/r;"), "d", "Lcom/reddit/fullbleedplayer/ui/p;", 4);
+                    MutableMethodImplementation chromeImpl = chrome.getImplementation();
+                    List<Instruction> chromeCode = new ArrayList<>(chromeImpl.getInstructions());
+                    int chromeHooks = 0;
+                    for (int i = chromeCode.size() - 1; i >= 0; i--) {
+                        Instruction ins = chromeCode.get(i);
+                        if (ins.getOpcode() != Opcode.RETURN_OBJECT) continue;
+                        int result = ((OneRegisterInstruction) ins).getRegisterA();
+                        int self = chromeImpl.getRegisterCount() - 5;
+                        if (self < 2) throw new IllegalStateException("No chrome scratch registers");
+                        chromeImpl.replaceInstruction(i,
+                            new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 1, result));
+                        chromeImpl.addInstruction(i + 1,
+                            new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 0, self));
+                        chromeImpl.addInstruction(i + 2,
+                            new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, 0, 2,
+                                ref("initialChrome", Arrays.asList("Ljava/lang/Object;",
+                                    "Ljava/lang/Object;"), "Ljava/lang/Object;")));
+                        chromeImpl.addInstruction(i + 3,
+                            new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, result));
+                        chromeImpl.addInstruction(i + 4, new BuilderInstruction21c(Opcode.CHECK_CAST,
+                            result, new ImmutableTypeReference("Lcom/reddit/fullbleedplayer/ui/p;")));
+                        chromeImpl.addInstruction(i + 5,
+                            new BuilderInstruction11x(Opcode.RETURN_OBJECT, result));
+                        chromeHooks++;
+                    }
+                    if (chromeHooks != 1) throw new IllegalStateException("Full bleed chrome mapper changed: " + chromeHooks);
+
                     MutableMethod viewState = one(context.mutableClassDefBy(
                         "Lcom/reddit/fullbleedplayer/ui/FullBleedViewModel;"),
                         "L", "Ljava/lang/Object;", 1);

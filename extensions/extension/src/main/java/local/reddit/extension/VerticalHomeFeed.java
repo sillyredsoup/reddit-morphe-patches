@@ -14,6 +14,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -364,11 +366,51 @@ public final class VerticalHomeFeed {
     private static ArrayList<Object> homePosts(Object pager) throws ReflectiveOperationException {
         Object state = call(call(pager, "getState"), "getValue");
         ArrayList<Object> posts = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
         for (Object section : (Iterable<?>) field(state, "b")) {
             Object link = sectionLink(section);
-            if (eligible(link) && media(link) && !posts.contains(link)) posts.add(link);
+            String id = postId(link);
+            if (eligible(link) && media(link) && id != null && ids.add(id)) posts.add(link);
         }
         return posts;
+    }
+
+    private static String postId(Object post) {
+        if (post == null) return null;
+        try {
+            String id = string(field(post, "kindWithId"));
+            if (id != null && !id.isEmpty()) return id;
+        } catch (ReflectiveOperationException | RuntimeException ignored) { }
+        return string(call(post, "getId"));
+    }
+
+    /** Link.equals includes changing scores, comments and analytics; only the ID is stable. */
+    private static ArrayList<Object> unseenPosts(List<?> posts, List<?> previous) {
+        Set<String> seen = new HashSet<>();
+        for (Object post : previous) seen.add(postId(post));
+        ArrayList<Object> fresh = new ArrayList<>();
+        for (Object post : posts) {
+            String id = postId(post);
+            if (id != null && seen.add(id)) fresh.add(post);
+        }
+        return fresh;
+    }
+
+    /** Set the initial visibility, leaving Reddit's subsequent tap toggles intact. */
+    public static Object initialChrome(Object mapper, Object state) {
+        try {
+            Object params = field(mapper, "k");
+            if (!MARKER.equals(field(field(params, "d"), "a"))) return state;
+            String[] fields = {"a", "b", "c", "d", "e", "f", "g", "i", "r", "v",
+                "w", "x", "y", "B", "L", "M", "N", "O", "P"};
+            Object[] values = new Object[fields.length];
+            for (int i = 0; i < fields.length; i++) values[i] = field(state, fields[i]);
+            values[12] = false; // FullBleedChromeState.isVisible
+            for (Constructor<?> constructor : state.getClass().getConstructors())
+                if (constructor.getParameterCount() == values.length)
+                    return constructor.newInstance(values);
+        } catch (ReflectiveOperationException | RuntimeException ignored) { }
+        return state;
     }
 
     private static boolean custom(Object source) {
@@ -444,8 +486,7 @@ public final class VerticalHomeFeed {
                     return;
                 }
                 ArrayList<Object> posts = homePosts(pager);
-                ArrayList<Object> fresh = new ArrayList<>(posts);
-                fresh.removeAll(previous);
+                ArrayList<Object> fresh = unseenPosts(posts, previous);
                 // A page can contain only text/ads. Continue until media arrives or Home ends/errors.
                 if (fresh.isEmpty() && hasMore(pager) && !"qk1.q".equals(status.getClass().getName()) && elapsed < 30000) {
                     pager.getClass().getMethod("a").invoke(pager);
@@ -461,15 +502,22 @@ public final class VerticalHomeFeed {
 
     private static void finishPage(Object source, Object pager, List<Object> posts) {
         try {
-            ArrayList<Object> fresh = new ArrayList<>(posts);
-            fresh.removeAll(snapshot);
+            ArrayList<Object> fresh = unseenPosts(posts, snapshot);
             Object pages = source.getClass().getMethod("f", List.class).invoke(source, fresh);
             boolean[] appended = {false};
             update(source, state -> {
                 try {
                     List<?> old = (List<?>) field(state, "a");
+                    // Match the native loader's second guard at the rendered-page level.
+                    Set<String> pageIds = new HashSet<>();
+                    for (Object page : old) pageIds.add(string(call(page, "c")));
+                    ArrayList<Object> newPages = new ArrayList<>();
+                    for (Object page : (Iterable<?>) pages) {
+                        String id = string(call(page, "c"));
+                        if (id != null && pageIds.add(id)) newPages.add(page);
+                    }
                     Object indexed = source.getClass().getMethod("c", int.class, List.class)
-                        .invoke(source, old.size(), pages);
+                        .invoke(source, old.size(), newPages);
                     Class<?> persistent = Class.forName("gp3.g");
                     Method append = null;
                     for (Method method : persistent.getMethods())

@@ -9,6 +9,7 @@ import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21t;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction22x;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction;
@@ -119,12 +120,48 @@ public final class VerticalHomeFeedPatch {
                     if (renderer == null || renderer.getImplementation() == null)
                         throw new IllegalStateException("Bottom tab renderer missing");
                     int descriptor = renderer.getImplementation().getRegisterCount() - parameterWords(renderer);
+                    int clickLabel = descriptor + 2;
+                    int icon = descriptor + 7;
+                    int label = descriptor + 9;
+                    if (descriptor < 2) throw new IllegalStateException("No bottom bar scratch registers");
                     renderer.getImplementation().addInstruction(0,
+                        new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 0, descriptor));
+                    renderer.getImplementation().addInstruction(1,
+                        new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 1, clickLabel));
+                    renderer.getImplementation().addInstruction(2,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, 0, 2,
+                            ref("tabLabel", Arrays.asList("Ljava/lang/Object;", "Ljava/lang/String;"),
+                                "Ljava/lang/String;")));
+                    renderer.getImplementation().addInstruction(3,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, clickLabel));
+                    renderer.getImplementation().addInstruction(4,
+                        new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 0, descriptor));
+                    renderer.getImplementation().addInstruction(5,
+                        new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 1, icon));
+                    renderer.getImplementation().addInstruction(6,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, 0, 2,
+                            ref("tabIcon", Arrays.asList("Ljava/lang/Object;",
+                                "Lkotlin/jvm/functions/Function2;"),
+                                "Lkotlin/jvm/functions/Function2;")));
+                    renderer.getImplementation().addInstruction(7,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, icon));
+                    renderer.getImplementation().addInstruction(8,
+                        new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 0, descriptor));
+                    renderer.getImplementation().addInstruction(9,
+                        new BuilderInstruction22x(Opcode.MOVE_OBJECT_FROM16, 1, label));
+                    renderer.getImplementation().addInstruction(10,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, 0, 2,
+                            ref("tabText", Arrays.asList("Ljava/lang/Object;",
+                                "Lkotlin/jvm/functions/Function2;"),
+                                "Lkotlin/jvm/functions/Function2;")));
+                    renderer.getImplementation().addInstruction(11,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, label));
+                    renderer.getImplementation().addInstruction(12,
                         new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, descriptor, 2,
                             ref("wrapClick", Arrays.asList("Ljava/lang/Object;",
                                 "Lkotlin/jvm/functions/Function0;"),
                                 "Lkotlin/jvm/functions/Function0;")));
-                    renderer.getImplementation().addInstruction(1,
+                    renderer.getImplementation().addInstruction(13,
                         new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, descriptor + 1));
 
                     String viewer = "Lcom/reddit/frontpage/presentation/listing/linkpager/refactor/PostDetailPagerScreen;";
@@ -184,6 +221,37 @@ public final class VerticalHomeFeedPatch {
                         }
                         if (hits != 1) throw new IllegalStateException("Provider flag changed: " + name);
                     }
+
+                    MutableMethod initial = one(context.mutableClassDefBy(
+                        "Lcom/reddit/fullbleedplayer/data/j;"), "a", "Ljava/lang/Object;", 4);
+                    MutableMethodImplementation initialImpl = initial.getImplementation();
+                    List<Instruction> initialCode = new ArrayList<>(initialImpl.getInstructions());
+                    int seedHooks = 0;
+                    for (int i = initialCode.size() - 1; i >= 0; i--) {
+                        Instruction ins = initialCode.get(i);
+                        if (ins.getOpcode() != Opcode.CHECK_CAST
+                            || !(ins instanceof ReferenceInstruction)
+                            || !"Lcom/reddit/fullbleedplayer/data/q;".equals(
+                                ((ReferenceInstruction) ins).getReference().toString())
+                            || i + 1 >= initialCode.size()
+                            || initialCode.get(i + 1).getOpcode() != Opcode.INSTANCE_OF
+                            || !(initialCode.get(i + 1) instanceof ReferenceInstruction)
+                            || !"Lcom/reddit/fullbleedplayer/data/o;".equals(
+                                ((ReferenceInstruction) initialCode.get(i + 1)).getReference().toString()))
+                            continue;
+                        int dataset = ((OneRegisterInstruction) ins).getRegisterA();
+                        int source = initialImpl.getRegisterCount() - 4;
+                        initialImpl.addInstruction(i + 1, new BuilderInstruction35c(Opcode.INVOKE_STATIC,
+                            2, source, dataset, 0, 0, 0,
+                            ref("initialMedia", Arrays.asList("Ljava/lang/Object;", "Ljava/lang/Object;"),
+                                "Ljava/lang/Object;")));
+                        initialImpl.addInstruction(i + 2,
+                            new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, dataset));
+                        initialImpl.addInstruction(i + 3, new BuilderInstruction21c(Opcode.CHECK_CAST,
+                            dataset, new ImmutableTypeReference("Lcom/reddit/fullbleedplayer/data/q;")));
+                        seedHooks++;
+                    }
+                    if (seedHooks != 1) throw new IllegalStateException("Full bleed initial loader changed: " + seedHooks);
                     return Unit.INSTANCE;
                 });
                 return Unit.INSTANCE;

@@ -2,17 +2,21 @@ package local.reddit.extension;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.widget.Toast;
 import java.lang.reflect.Field;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function2;
 
 /** Runtime half of the opt-in vertical Home viewer for Reddit 2026.14.0. */
 public final class VerticalHomeFeed {
@@ -25,6 +29,8 @@ public final class VerticalHomeFeed {
     private static volatile List<Object> snapshot = Collections.emptyList();
     private static volatile boolean vertical;
     private static volatile Object navScreen;
+    private static volatile Method drawIcon;
+    private static volatile Method drawLabel;
 
     private VerticalHomeFeed() { }
 
@@ -71,6 +77,64 @@ public final class VerticalHomeFeed {
                     Object screen = call(nav, "getCurrentScreen");
                     if (isHome(screen)) open(activity, screen);
                     else Toast.makeText(activity, "Open Home feed first", Toast.LENGTH_SHORT).show();
+                }
+                return kotlinUnit();
+            };
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
+    }
+
+    public static String tabLabel(Object descriptor, String original) {
+        try { return "Vertical".equals(field(descriptor, "a")) ? "Vertical" : original; }
+        catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
+    }
+
+    public static Function2<?, ?, ?> tabIcon(Object descriptor, Function2<?, ?, ?> original) {
+        try {
+            if (!"Vertical".equals(field(descriptor, "a"))) return original;
+            return (composer, flags) -> {
+                try {
+                    Method draw = drawIcon;
+                    if (draw == null) {
+                        Class<?> icon = Class.forName("com.reddit.ui.compose.icons.h");
+                        draw = Class.forName("com.reddit.ui.compose.pointer.q9").getMethod("a",
+                            icon, Class.forName("androidx.compose.ui.s"), long.class,
+                            boolean.class, String.class,
+                            Class.forName("androidx.compose.runtime.m"), int.class, int.class);
+                        drawIcon = draw;
+                    }
+                    Object video = Class.forName("com.reddit.ui.compose.icons.i0")
+                        .getField("J2").get(null);
+                    draw.invoke(null, video, null, 0L, false, null, composer, 24576, 14);
+                } catch (ReflectiveOperationException | RuntimeException error) {
+                    ((Function2<Object, Object, ?>) original).invoke(composer, flags);
+                }
+                return kotlinUnit();
+            };
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Function2<?, ?, ?> tabText(Object descriptor, Function2<?, ?, ?> original) {
+        try {
+            if (!"Vertical".equals(field(descriptor, "a"))) return original;
+            return (composer, flags) -> {
+                try {
+                    Method draw = drawLabel;
+                    if (draw == null) {
+                        for (Method candidate : Class.forName("com.reddit.ui.compose.ds.kh").getMethods()) {
+                            if ("b".equals(candidate.getName()) && candidate.getParameterCount() == 21
+                                && candidate.getParameterTypes()[0] == String.class) {
+                                draw = candidate;
+                                drawLabel = draw;
+                                break;
+                            }
+                        }
+                    }
+                    if (draw == null) throw new NoSuchMethodException("bottom bar text");
+                    draw.invoke(null, "Vertical", null, 0L, 0L, null, null, null, 0L,
+                        null, 0, 0L, 0, false, 0, 0, null, null, composer, 0, 0, 262142);
+                } catch (ReflectiveOperationException | RuntimeException error) {
+                    ((Function2<Object, Object, ?>) original).invoke(composer, flags);
                 }
                 return kotlinUnit();
             };
@@ -148,7 +212,7 @@ public final class VerticalHomeFeed {
                     else if (id != null && id.startsWith("post_preview_"))
                         id = id.substring("post_preview_".length());
                     Object link = LINKS.get(id);
-                    if (eligible(link) && !posts.contains(link)) posts.add(link);
+                    if (eligible(link) && media(link) && !posts.contains(link)) posts.add(link);
                 }
             }
             if (posts.isEmpty()) throw new IllegalStateException(
@@ -156,26 +220,59 @@ public final class VerticalHomeFeed {
                     "No linked posts (sections " + sectionCount + ", cached " + linkCount
                         + ", first " + firstKey + ")");
             snapshot = Collections.unmodifiableList(posts);
-            Bundle args = new Bundle();
-            String firstId = string(call(posts.get(0), "getId"));
-            if (firstId == null) firstId = string(call(posts.get(0), "getKindWithId"));
-            args.putString("selectedLinkId", firstId);
-            args.putString("listingType", "HOME");
-            args.putString("feed_data_source", MARKER);
-            Class<?> sort = Class.forName("com.reddit.listing.model.sort.SortType");
-            @SuppressWarnings({"unchecked", "rawtypes"}) Object none = Enum.valueOf((Class) sort, "NONE");
-            args.putSerializable("sort", (java.io.Serializable) none);
+            Object first = posts.get(0);
+            Class<?> linkType = Class.forName("com.reddit.domain.model.Link");
+            Class<?> listingType = Class.forName("com.reddit.listing.common.ListingType");
+            Class<?> mediaType = Class.forName("com.reddit.domain.model.media.MediaContext");
+            Class<?> dataType = Class.forName("com.reddit.fullbleedplayer.data.s");
+            Class<?> sessionType = Class.forName("com.reddit.domain.model.post.NavigationSession");
+            Class<?> commentsType = Class.forName("com.reddit.domain.model.media.CommentsState");
+            Class<?> entryType = Class.forName("com.reddit.fullbleedplayer.navigation.VideoEntryPoint");
+            Class<?> referrerType = Class.forName("fn.c");
+            @SuppressWarnings({"unchecked", "rawtypes"}) Object home = Enum.valueOf((Class) listingType, "HOME");
+            @SuppressWarnings({"unchecked", "rawtypes"}) Object closed = Enum.valueOf((Class) commentsType, "CLOSED");
+            @SuppressWarnings({"unchecked", "rawtypes"}) Object entry = Enum.valueOf((Class) entryType, "HOME");
+            String firstId = string(call(first, "getId"));
+            if (firstId == null) firstId = string(call(first, "getKindWithId"));
+            String kindId = string(call(first, "getKindWithId"));
+            String uniqueId = string(call(first, "getUniqueId"));
+            if (uniqueId == null) uniqueId = firstId;
+            String correlation = string(call(first, "getEventCorrelationId"));
+            if (correlation == null) correlation = UUID.randomUUID().toString();
+            Object mediaContext = mediaType.getConstructor(List.class, listingType, String.class,
+                String.class, List.class, boolean.class, boolean.class, String.class)
+                .newInstance(Collections.singletonList(call(first, "getSubredditId")), home,
+                    kindId, "", null, image(first, linkType), false, null);
+            Object data = dataType.getConstructor(String.class,
+                Class.forName("com.reddit.listing.model.sort.SortType"),
+                Class.forName("com.reddit.listing.model.sort.SortTimeFrame"))
+                .newInstance(MARKER, null, null);
             Object session = Class.forName("com.reddit.domain.model.post.NavigationSession")
                 .getConstructor().newInstance();
-            args.putParcelable("navigationSession", (Parcelable) session);
-            Class<?> detail = Class.forName(
-                "com.reddit.frontpage.presentation.listing.linkpager.refactor.PostDetailPagerScreen");
-            Object viewer = detail.getConstructor(Bundle.class).newInstance(args);
-            Class<?> base = Class.forName("com.reddit.screen.BaseScreen");
-            Class<?> navEntry = Class.forName("com.reddit.navstack.h1");
-            Class.forName("com.reddit.screen.b0")
-                .getMethod("q", Context.class, base, navEntry)
-                .invoke(null, activity, viewer, null);
+            Object params;
+            if (image(first, linkType) || call(first, "getGallery") != null) {
+                Class<?> paramsType = Class.forName("com.reddit.fullbleedplayer.common.d");
+                params = paramsType.getConstructor(String.class, String.class, boolean.class,
+                    commentsType, Bundle.class, mediaType, dataType, sessionType, entryType,
+                    referrerType, String.class, boolean.class, String.class, ArrayList.class,
+                    int.class, List.class).newInstance(correlation, firstId, false, closed, null,
+                        mediaContext, data, session, entry, null, uniqueId, false, MARKER,
+                        null, 0, null);
+            } else {
+                Class<?> correlationType = Class.forName("com.reddit.fullbleedplayer.l");
+                Object token = correlationType.getConstructor(String.class).newInstance(correlation);
+                Class<?> paramsType = Class.forName("com.reddit.fullbleedplayer.common.f");
+                params = paramsType.getConstructor(correlationType, String.class, boolean.class,
+                    commentsType, Bundle.class, mediaType, dataType, sessionType, entryType,
+                    referrerType, String.class, boolean.class, String.class, String.class,
+                    boolean.class).newInstance(token, firstId, false, closed, null,
+                        mediaContext, data, session, entry, null, uniqueId, false, MARKER,
+                        null, false);
+            }
+            Class<?> player = Class.forName("com.reddit.fullbleedplayer.common.FbpActivity");
+            Intent intent = new Intent(activity, player);
+            intent.putExtra("FBP_PARAMS_EXTRA", (Parcelable) params);
+            activity.startActivity(intent);
         } catch (ReflectiveOperationException | RuntimeException error) {
             String reason = error.getMessage();
             Toast.makeText(activity, "Vertical feed: " + (reason != null ? reason
@@ -230,6 +327,36 @@ public final class VerticalHomeFeed {
     private static boolean eligible(Object link) {
         return link != null && !Boolean.TRUE.equals(call(link, "getPromoted"))
             && !Boolean.TRUE.equals(call(link, "isBlankAd"));
+    }
+
+    private static boolean media(Object link) {
+        try {
+            Class<?> linkType = Class.forName("com.reddit.domain.model.Link");
+            Class<?> types = Class.forName("com.reddit.domain.model.listing.PostTypesKt");
+            return Boolean.TRUE.equals(types.getMethod("isImageLinkType", linkType).invoke(null, link))
+                || Boolean.TRUE.equals(types.getMethod("isValidFBPVideo", linkType).invoke(null, link))
+                || Boolean.TRUE.equals(types.getMethod("isGalleryPost", linkType).invoke(null, link));
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
+    private static boolean image(Object link, Class<?> linkType) throws ReflectiveOperationException {
+        return Boolean.TRUE.equals(Class.forName("com.reddit.domain.model.listing.PostTypesKt")
+            .getMethod("isImageLinkType", linkType).invoke(null, link));
+    }
+
+    /** Replace Reddit's discovered feed with the Home media snapshot. */
+    public static Object initialMedia(Object source, Object original) {
+        try {
+            Object params = field(source, "g");
+            Object data = field(params, "d");
+            if (!MARKER.equals(field(data, "a"))) return original;
+            List<Object> posts = snapshot;
+            if (posts.isEmpty()) return original;
+            Class<?> linkType = Class.forName("com.reddit.domain.model.Link");
+            return Class.forName("com.reddit.fullbleedplayer.data.p")
+                .getConstructor(ArrayList.class, linkType, int.class)
+                .newInstance(new ArrayList<>(posts), posts.get(0), 0);
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
     }
 
     private static Object kotlinUnit() {

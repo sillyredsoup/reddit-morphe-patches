@@ -9,18 +9,20 @@ if [[ -z "${MORPHE_DESKTOP_JAR:-}" || -z "${R8_JAR:-}" || -z "${ANDROID_JAR:-}" 
 fi
 build_dir="$repo_dir/.local-build"
 rm -rf "$build_dir"
-mkdir -p "$build_dir/patch-classes" "$build_dir/extension-classes" "$build_dir/dex" "$build_dir/bundle/META-INF" "$build_dir/bundle/extensions"
+mkdir -p "$build_dir/patch-classes" "$build_dir/patch-dex" "$build_dir/extension-classes" "$build_dir/dex" "$build_dir/bundle/META-INF" "$build_dir/bundle/extensions"
 javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/patch-classes" "$repo_dir/patches/src/main/java/local/reddit/RedditModePatch.java"
 javac -cp "$MORPHE_DESKTOP_JAR:$ANDROID_JAR" -d "$build_dir/extension-classes" "$repo_dir/extensions/extension/src/main/java/local/reddit/extension/RedditMode.java"
+java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 28 --lib "$ANDROID_JAR" --classpath "$MORPHE_DESKTOP_JAR" --output "$build_dir/patch-dex" "$build_dir"/patch-classes/local/reddit/*.class
 java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 26 --lib "$ANDROID_JAR" --output "$build_dir/dex" "$build_dir"/extension-classes/local/reddit/extension/*.class
 cp -R "$build_dir/patch-classes/." "$build_dir/bundle/"
+cp "$build_dir/patch-dex/classes.dex" "$build_dir/bundle/classes.dex"
 cp "$build_dir/dex/classes.dex" "$build_dir/bundle/extensions/reddit-mode.mpe"
 cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
 Description: Hide interactive posts and add NSFW mode
-Version: 0.1.1
-Timestamp: 1790686502000
+Version: 0.1.2
+Timestamp: 1790687097000
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

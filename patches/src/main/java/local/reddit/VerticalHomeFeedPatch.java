@@ -1,6 +1,7 @@
 package local.reddit;
 
 import app.morphe.patcher.patch.*;
+import app.morphe.patcher.util.proxy.mutableTypes.MutableClass;
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod;
 import com.android.tools.smali.dexlib2.Opcode;
 import com.android.tools.smali.dexlib2.builder.Label;
@@ -11,6 +12,7 @@ import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21t
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction;
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction;
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction;
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction;
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
@@ -30,7 +32,7 @@ public final class VerticalHomeFeedPatch {
     public static synchronized BytecodePatch getVerticalHomeFeedPatch() {
         if (patch != null) return patch;
         patch = PatchKt.bytecodePatch("Reddit - Vertical home feed",
-            "Adds a Home button that opens loaded posts in a vertical swipe viewer.", false,
+            "Adds a bottom bar button for a vertical Home feed viewer.", false,
             builder -> {
                 builder.compatibleWith(new Compatibility("com.reddit.frontpage", "Reddit", null,
                     ApkFileType.APKM, 0xFF4500, null,
@@ -48,9 +50,68 @@ public final class VerticalHomeFeedPatch {
                         Opcode.INVOKE_STATIC_RANGE, list, 1, ref("rememberLinks",
                             Collections.singletonList("Ljava/util/List;"), "V")));
 
-                    String home = "Lcom/reddit/feedslegacy/switcher/impl/homepager/compose/HomePagerScreen;";
-                    hookView(context.mutableClassDefBy(home), "c4", "attachHome");
-                    hookView(context.mutableClassDefBy(home), "l4", "detachHome");
+                    MutableMethod linkId = one(context.mutableClassDefBy(
+                        "Lcom/reddit/domain/model/Link;"), "getKindWithId", "Ljava/lang/String;", 0);
+                    int link = linkId.getImplementation().getRegisterCount() - 1;
+                    linkId.getImplementation().addInstruction(0, new BuilderInstruction3rc(
+                        Opcode.INVOKE_STATIC_RANGE, link, 1, ref("rememberLink",
+                            Collections.singletonList("Ljava/lang/Object;"), "V")));
+
+                    MutableClass bottom = context.mutableClassDefBy(
+                        "Lcom/reddit/launch/bottomnav/BottomNavScreen;");
+                    for (String name : Arrays.asList("J5", "K5")) {
+                        MutableMethod nav = one(bottom, name,
+                            "J5".equals(name) ? "Lgp3/g;" : "Lgp3/c;", 1);
+                        int self = nav.getImplementation().getRegisterCount() - 2;
+                        nav.getImplementation().addInstruction(0, new BuilderInstruction3rc(
+                            Opcode.INVOKE_STATIC_RANGE, self, 1, ref("initializeNav",
+                                Collections.singletonList("Ljava/lang/Object;"), "V")));
+                        List<Instruction> code = new ArrayList<>(nav.getImplementation().getInstructions());
+                        int builds = 0;
+                        for (int i = code.size() - 1; i >= 0; i--) {
+                            Instruction ins = code.get(i);
+                            if (!(ins instanceof ReferenceInstruction)
+                                || !(ins instanceof FiveRegisterInstruction)
+                                || !(((ReferenceInstruction) ins).getReference() instanceof MethodReference))
+                                continue;
+                            MethodReference method = (MethodReference) ((ReferenceInstruction) ins).getReference();
+                            boolean match = "J5".equals(name)
+                                ? "build".equals(method.getName())
+                                    && method.getDefiningClass().contains("ListBuilder")
+                                : "M".equals(method.getName())
+                                    && "Lwe/w;".equals(method.getDefiningClass());
+                            if (!match) continue;
+                            int builderRegister = ((FiveRegisterInstruction) ins).getRegisterC();
+                            nav.getImplementation().addInstruction(i,
+                                new BuilderInstruction35c(Opcode.INVOKE_STATIC, 1,
+                                    builderRegister, 0, 0, 0, 0,
+                                    ref("addButton", Collections.singletonList("Ljava/lang/Object;"), "V")));
+                            builds++;
+                        }
+                        if (builds != 1) throw new IllegalStateException("Bottom bar changed: " + name);
+                    }
+
+                    MutableMethod renderer = null;
+                    for (MutableMethod method : context.mutableClassDefBy(
+                        "Lcom/reddit/widget/bottomnav/f;").getMethods()) {
+                        if (!"b".equals(method.getName()) || !"V".equals(method.getReturnType())
+                            || method.getParameterTypes().size() != 13
+                            || !"Lcom/reddit/widget/bottomnav/g;".contentEquals(method.getParameterTypes().get(0))
+                            || !"Lkotlin/jvm/functions/Function0;".contentEquals(method.getParameterTypes().get(1)))
+                            continue;
+                        if (renderer != null) throw new IllegalStateException("Multiple bottom tab renderers");
+                        renderer = method;
+                    }
+                    if (renderer == null || renderer.getImplementation() == null)
+                        throw new IllegalStateException("Bottom tab renderer missing");
+                    int descriptor = renderer.getImplementation().getRegisterCount() - parameterWords(renderer);
+                    renderer.getImplementation().addInstruction(0,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, descriptor, 2,
+                            ref("wrapClick", Arrays.asList("Ljava/lang/Object;",
+                                "Lkotlin/jvm/functions/Function0;"),
+                                "Lkotlin/jvm/functions/Function0;")));
+                    renderer.getImplementation().addInstruction(1,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, descriptor + 1));
 
                     String viewer = "Lcom/reddit/frontpage/presentation/listing/linkpager/refactor/PostDetailPagerScreen;";
                     hookScreen(context.mutableClassDefBy(viewer), "n5", "pagerAttached");
@@ -116,7 +177,14 @@ public final class VerticalHomeFeedPatch {
         return patch;
     }
 
-    private static void hookScreen(app.morphe.patcher.util.proxy.mutableTypes.MutableClass type,
+    private static int parameterWords(MutableMethod method) {
+        int result = 0;
+        for (CharSequence p : method.getParameterTypes())
+            result += ("J".contentEquals(p) || "D".contentEquals(p)) ? 2 : 1;
+        return result;
+    }
+
+    private static void hookScreen(MutableClass type,
                                    String method, String hook) {
         MutableMethod target = one(type, method, "V", 0);
         int self = target.getImplementation().getRegisterCount() - 1;
@@ -124,18 +192,15 @@ public final class VerticalHomeFeedPatch {
             self, 1, ref(hook, Collections.singletonList("Ljava/lang/Object;"), "V")));
     }
 
-    private static void hookView(app.morphe.patcher.util.proxy.mutableTypes.MutableClass type,
+    private static void hookView(MutableClass type,
                                  String method, String hook) {
         MutableMethod target = one(type, method, "V", 1);
         int self = target.getImplementation().getRegisterCount() - 2;
-        int count = "detachHome".equals(hook) || "pagerAttached".equals(hook)
-            || "pagerDetached".equals(hook) ? 1 : 2;
         target.getImplementation().addInstruction(0, new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE,
-            self, count, ref(hook, count == 1 ? Collections.singletonList("Ljava/lang/Object;")
-                : Arrays.asList("Ljava/lang/Object;", "Landroid/view/View;"), "V")));
+            self, 1, ref(hook, Collections.singletonList("Ljava/lang/Object;"), "V")));
     }
 
-    private static MutableMethod one(app.morphe.patcher.util.proxy.mutableTypes.MutableClass type,
+    private static MutableMethod one(MutableClass type,
                                      String name, String result, int args) {
         MutableMethod found = null;
         for (MutableMethod method : type.getMethods()) {

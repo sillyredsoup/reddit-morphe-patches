@@ -2,24 +2,17 @@ package local.reddit.extension;
 
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.view.Gravity;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
-import android.widget.FrameLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import kotlin.jvm.functions.Function0;
 
 /** Runtime half of the opt-in vertical Home viewer for Reddit 2026.14.0. */
 public final class VerticalHomeFeed {
@@ -31,86 +24,66 @@ public final class VerticalHomeFeed {
     };
     private static volatile List<Object> snapshot = Collections.emptyList();
     private static volatile boolean vertical;
-    private static TextView button;
-    private static Object home;
-    private static ViewTreeObserver.OnGlobalLayoutListener buttonWatcher;
-    private static ViewGroup buttonParent;
+    private static volatile Object navScreen;
 
     private VerticalHomeFeed() { }
 
     public static void rememberLinks(List<?> links) {
         if (links == null) return;
+        for (Object link : links) rememberLink(link);
+    }
+
+    public static void rememberLink(Object link) {
+        if (link == null) return;
         synchronized (LINKS) {
-            for (Object link : links) {
-                String id = string(call(link, "getKindWithId"));
+            try {
+                String id = string(field(link, "kindWithId"));
                 if (id != null) LINKS.put(id, link);
                 String rawId = string(call(link, "getId"));
                 if (rawId != null) LINKS.put(rawId, link);
-            }
+            } catch (ReflectiveOperationException | RuntimeException ignored) { }
         }
     }
 
-    public static void attachHome(Object screen, View view) {
-        if (screen == null || view == null || button != null) return;
-        Activity activity = activity(screen);
-        if (activity == null) return;
-        ViewGroup decor = (ViewGroup) activity.getWindow().getDecorView();
-        TextView control = new TextView(activity);
-        control.setText("Vertical feed");
-        control.setTextColor(Color.WHITE);
-        control.setTextSize(13);
-        control.setGravity(Gravity.CENTER);
-        int pad = dp(activity, 12);
-        control.setPadding(pad, dp(activity, 9), pad, dp(activity, 9));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(0xdD222222);
-        background.setCornerRadius(dp(activity, 24));
-        control.setBackground(background);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.END | Gravity.BOTTOM);
-        params.setMargins(0, 0, dp(activity, 16), dp(activity, 92));
-        decor.addView(control, params);
-        home = screen;
-        button = control;
-        control.setOnClickListener(v -> open(activity, screen));
-        ViewTreeObserver.OnGlobalLayoutListener watcher = () -> {
-            if (button == control) {
-                boolean visible = !vertical && isHome(screen);
-                int visibility = visible ? View.VISIBLE : View.GONE;
-                if (control.getVisibility() != visibility) control.setVisibility(visibility);
-            }
-        };
-        buttonWatcher = watcher;
-        buttonParent = decor;
-        decor.getViewTreeObserver().addOnGlobalLayoutListener(watcher);
-        control.setVisibility(isHome(screen) ? View.VISIBLE : View.GONE);
+    public static void initializeNav(Object screen) {
+        navScreen = screen;
     }
 
-    public static void detachHome(Object screen) {
-        if (home != screen) return;
-        TextView control = button;
-        ViewTreeObserver.OnGlobalLayoutListener watcher = buttonWatcher;
-        ViewGroup parent = buttonParent;
-        button = null;
-        home = null;
-        buttonWatcher = null;
-        buttonParent = null;
-        if (parent != null && watcher != null)
-            parent.getViewTreeObserver().removeOnGlobalLayoutListener(watcher);
-        if (control != null && control.getParent() instanceof ViewGroup)
-            ((ViewGroup) control.getParent()).removeView(control);
+    @SuppressWarnings("unchecked")
+    public static void addButton(Object builder) {
+        if (!(builder instanceof List<?>) || ((List<?>) builder).isEmpty()) return;
+        try {
+            List<Object> items = (List<Object>) builder;
+            Object original = items.get(0);
+            Object content = field(original, "b");
+            Constructor<?> ctor = original.getClass().getConstructor(String.class, content.getClass());
+            items.add(1, ctor.newInstance("Vertical", content));
+        } catch (ReflectiveOperationException | RuntimeException ignored) { }
+    }
+
+    public static Function0<?> wrapClick(Object descriptor, Function0<?> original) {
+        try {
+            if (!"Vertical".equals(field(descriptor, "a"))) return original;
+            return () -> {
+                Object nav = navScreen;
+                Activity activity = activity(nav);
+                if (activity != null) {
+                    Object screen = call(nav, "getCurrentScreen");
+                    if (isHome(screen)) open(activity, screen);
+                    else Toast.makeText(activity, "Open Home feed first", Toast.LENGTH_SHORT).show();
+                }
+                return kotlinUnit();
+            };
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
     }
 
     public static void pagerAttached(Object screen) {
         vertical = marked(screen);
-        updateButton();
     }
 
     public static void pagerDetached(Object screen) {
         if (marked(screen)) {
             vertical = false;
-            updateButton();
         }
     }
 
@@ -158,18 +131,30 @@ public final class VerticalHomeFeed {
             Object pager = field(model, "x");
             Object state = call(call(pager, "getState"), "getValue");
             Object sections = field(state, "b");
-            if (!(sections instanceof Iterable<?>)) throw new IllegalStateException("No Home posts loaded");
+            if (!(sections instanceof Iterable<?>))
+                throw new IllegalStateException("Home sections unavailable");
             ArrayList<Object> posts = new ArrayList<>();
+            int sectionCount = 0;
+            String firstKey = null;
+            int linkCount;
             synchronized (LINKS) {
+                linkCount = LINKS.size();
                 for (Object section : (Iterable<?>) sections) {
                     String id = string(call(section, "a"));
+                    if (firstKey == null) firstKey = id;
+                    sectionCount++;
                     if (id != null && id.startsWith("feed_post_section_"))
                         id = id.substring("feed_post_section_".length());
+                    else if (id != null && id.startsWith("post_preview_"))
+                        id = id.substring("post_preview_".length());
                     Object link = LINKS.get(id);
                     if (eligible(link) && !posts.contains(link)) posts.add(link);
                 }
             }
-            if (posts.isEmpty()) throw new IllegalStateException("Scroll Home to load posts first");
+            if (posts.isEmpty()) throw new IllegalStateException(
+                sectionCount == 0 ? "Home is still loading" :
+                    "No linked posts (sections " + sectionCount + ", cached " + linkCount
+                        + ", first " + firstKey + ")");
             snapshot = Collections.unmodifiableList(posts);
             Bundle args = new Bundle();
             String firstId = string(call(posts.get(0), "getId"));
@@ -192,7 +177,9 @@ public final class VerticalHomeFeed {
                 .getMethod("q", Context.class, base, navEntry)
                 .invoke(null, activity, viewer, null);
         } catch (ReflectiveOperationException | RuntimeException error) {
-            Toast.makeText(activity, "Vertical feed unavailable: " + error.getClass().getSimpleName(),
+            String reason = error.getMessage();
+            Toast.makeText(activity, "Vertical feed: " + (reason != null ? reason
+                    : error.getClass().getSimpleName()),
                 Toast.LENGTH_LONG).show();
         }
     }
@@ -210,13 +197,6 @@ public final class VerticalHomeFeed {
             Object args = field(screen, "f60223b");
             return args instanceof Bundle && MARKER.equals(((Bundle) args).getString("feed_data_source"));
         } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
-    }
-
-    private static void updateButton() {
-        TextView control = button;
-        Object screen = home;
-        if (control != null && screen != null) control.post(() ->
-            control.setVisibility(!vertical && isHome(screen) ? View.VISIBLE : View.GONE));
     }
 
     private static Activity activity(Object screen) {
@@ -252,7 +232,11 @@ public final class VerticalHomeFeed {
             && !Boolean.TRUE.equals(call(link, "isBlankAd"));
     }
 
-    private static int dp(Context context, int size) {
-        return Math.round(size * context.getResources().getDisplayMetrics().density);
+    private static Object kotlinUnit() {
+        try {
+            Class<?> type = Class.forName("kotlin.Unit");
+            try { return type.getField("a").get(null); }
+            catch (NoSuchFieldException missing) { return type.getField("INSTANCE").get(null); }
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return null; }
     }
 }

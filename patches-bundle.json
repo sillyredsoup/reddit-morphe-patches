@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-09-29T21:13:00",
-  "description": "Reddit 2026.14.0 with Reddit's vertical media pager for Home posts.",
-  "download_url": "https://github.com/sillyredsoup/reddit-morphe-patches/releases/download/v0.3.4/patches-0.3.4.mpp",
+  "created_at": "2026-09-29T21:39:12",
+  "description": "Vertical Home media viewer with scroll position and Home pagination.",
+  "download_url": "https://github.com/sillyredsoup/reddit-morphe-patches/releases/download/v0.3.5/patches-0.3.5.mpp",
   "signature_download_url": "",
-  "version": "0.3.4"
+  "version": "0.3.5"
 }

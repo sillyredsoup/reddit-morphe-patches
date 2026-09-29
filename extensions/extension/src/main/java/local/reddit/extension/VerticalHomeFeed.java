@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Parcelable;
 import android.widget.Toast;
 import java.lang.reflect.Field;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function1;
 import kotlin.jvm.functions.Function2;
 
 /** Runtime half of the opt-in vertical Home viewer for Reddit 2026.14.0. */
@@ -28,6 +31,11 @@ public final class VerticalHomeFeed {
     };
     private static volatile List<Object> snapshot = Collections.emptyList();
     private static volatile boolean vertical;
+    private static final Map<Object, Integer> POSITIONS = Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    private static volatile Object homePager;
+    private static volatile int initialIndex;
+    private static boolean requesting;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static volatile Object navScreen;
     private static volatile Method drawIcon;
     private static volatile Method drawLabel;
@@ -193,34 +201,24 @@ public final class VerticalHomeFeed {
             Object child = call(screen, "O5");
             Object model = call(child, "F1");
             Object pager = field(model, "x");
-            Object state = call(call(pager, "getState"), "getValue");
-            Object sections = field(state, "b");
-            if (!(sections instanceof Iterable<?>))
-                throw new IllegalStateException("Home sections unavailable");
-            ArrayList<Object> posts = new ArrayList<>();
-            int sectionCount = 0;
-            String firstKey = null;
-            int linkCount;
-            synchronized (LINKS) {
-                linkCount = LINKS.size();
-                for (Object section : (Iterable<?>) sections) {
-                    String id = string(call(section, "a"));
-                    if (firstKey == null) firstKey = id;
-                    sectionCount++;
-                    if (id != null && id.startsWith("feed_post_section_"))
-                        id = id.substring("feed_post_section_".length());
-                    else if (id != null && id.startsWith("post_preview_"))
-                        id = id.substring("post_preview_".length());
-                    Object link = LINKS.get(id);
-                    if (eligible(link) && media(link) && !posts.contains(link)) posts.add(link);
+            homePager = pager;
+            requesting = false;
+            ArrayList<Object> posts = homePosts(pager);
+            if (posts.isEmpty()) throw new IllegalStateException("No Home images or videos loaded");
+            int position = POSITIONS.getOrDefault(pager, 0);
+            Object sections = field(call(call(pager, "getState"), "getValue"), "b");
+            int sectionIndex = 0;
+            Object focused = null;
+            for (Object section : (Iterable<?>) sections) {
+                Object candidate = sectionLink(section);
+                if (sectionIndex++ >= position && posts.contains(candidate)) {
+                    focused = candidate;
+                    break;
                 }
             }
-            if (posts.isEmpty()) throw new IllegalStateException(
-                sectionCount == 0 ? "Home is still loading" :
-                    "No linked posts (sections " + sectionCount + ", cached " + linkCount
-                        + ", first " + firstKey + ")");
+            initialIndex = focused == null ? posts.size() - 1 : posts.indexOf(focused);
             snapshot = Collections.unmodifiableList(posts);
-            Object first = posts.get(0);
+            Object first = posts.get(initialIndex);
             Class<?> linkType = Class.forName("com.reddit.domain.model.Link");
             Class<?> listingType = Class.forName("com.reddit.listing.common.ListingType");
             Class<?> mediaType = Class.forName("com.reddit.domain.model.media.MediaContext");
@@ -344,6 +342,157 @@ public final class VerticalHomeFeed {
             .getMethod("isImageLinkType", linkType).invoke(null, link));
     }
 
+    /** Scroll positions belong to a pager, so profile/subreddit scrolling cannot overwrite Home. */
+    public static void rememberPosition(Object handler, Object event) {
+        if (event == null) return;
+        try {
+            Integer position = (Integer) field(event, "a");
+            if (position != null) POSITIONS.put(field(handler, "a"), position);
+        }
+        catch (ReflectiveOperationException | RuntimeException ignored) { }
+    }
+
+    private static Object sectionLink(Object section) {
+        String id = string(call(section, "a"));
+        if (id != null && id.startsWith("feed_post_section_"))
+            id = id.substring("feed_post_section_".length());
+        else if (id != null && id.startsWith("post_preview_"))
+            id = id.substring("post_preview_".length());
+        synchronized (LINKS) { return LINKS.get(id); }
+    }
+
+    private static ArrayList<Object> homePosts(Object pager) throws ReflectiveOperationException {
+        Object state = call(call(pager, "getState"), "getValue");
+        ArrayList<Object> posts = new ArrayList<>();
+        for (Object section : (Iterable<?>) field(state, "b")) {
+            Object link = sectionLink(section);
+            if (eligible(link) && media(link) && !posts.contains(link)) posts.add(link);
+        }
+        return posts;
+    }
+
+    private static boolean custom(Object source) {
+        try { return MARKER.equals(field(field(field(source, "g"), "d"), "a")); }
+        catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
+    private static boolean hasMore(Object pager) {
+        try {
+            Object status = field(call(call(pager, "getState"), "getValue"), "c");
+            // qk1.p is the pager's exhausted state; qk1.q is a load error.
+            return !"qk1.p".equals(status.getClass().getName());
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
+    private static Object copyPager(Object state, Object items, boolean loading, boolean more)
+            throws ReflectiveOperationException {
+        Object[] values = new Object[9];
+        for (int i = 0; i < values.length; i++) values[i] = field(state, String.valueOf((char) ('a' + i)));
+        values[0] = items;
+        values[1] = loading;
+        values[2] = more;
+        for (Constructor<?> constructor : state.getClass().getConstructors())
+            if (constructor.getParameterCount() == 9) return constructor.newInstance(values);
+        throw new NoSuchMethodException("Media pager state");
+    }
+
+    /** Keep the media player's next-page flag in sync with Home, including its initial update. */
+    public static Function1<Object, Object> wrapUpdate(Object source, Function1<Object, Object> original) {
+        if (!custom(source)) return original;
+        return state -> {
+            Object updated = original.invoke(state);
+            try { return copyPager(updated, field(updated, "a"), (Boolean) field(updated, "b"), hasMore(homePager)); }
+            catch (ReflectiveOperationException | RuntimeException ignored) { return updated; }
+        };
+    }
+
+    private static void update(Object source, Function1<Object, Object> transform)
+            throws ReflectiveOperationException {
+        source.getClass().getMethod("l", Function1.class).invoke(source, transform);
+    }
+
+    /** Use exactly the Home pager request used by the normal near-bottom scroll handler. */
+    public static boolean loadMore(Object source) {
+        if (!custom(source)) return false;
+        MAIN.post(() -> {
+            if (requesting || homePager == null) return;
+            requesting = true;
+            Object pager = homePager;
+            List<Object> previous = snapshot;
+            try {
+                update(source, state -> {
+                    try { return copyPager(state, field(state, "a"), true, hasMore(pager)); }
+                    catch (ReflectiveOperationException error) { return state; }
+                });
+                pager.getClass().getMethod("a").invoke(pager);
+                pollPage(source, pager, previous, android.os.SystemClock.uptimeMillis());
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                finishPage(source, pager, previous);
+            }
+        });
+        return true;
+    }
+
+    private static void pollPage(Object source, Object pager, List<Object> previous, long started) {
+        MAIN.postDelayed(() -> {
+            if (pager != homePager) return;
+            try {
+                Object status = field(call(call(pager, "getState"), "getValue"), "c");
+                long elapsed = android.os.SystemClock.uptimeMillis() - started;
+                if ((elapsed < 500 || "qk1.s".equals(status.getClass().getName())) && elapsed < 30000) {
+                    pollPage(source, pager, previous, started);
+                    return;
+                }
+                ArrayList<Object> posts = homePosts(pager);
+                ArrayList<Object> fresh = new ArrayList<>(posts);
+                fresh.removeAll(previous);
+                // A page can contain only text/ads. Continue until media arrives or Home ends/errors.
+                if (fresh.isEmpty() && hasMore(pager) && !"qk1.q".equals(status.getClass().getName()) && elapsed < 30000) {
+                    pager.getClass().getMethod("a").invoke(pager);
+                    pollPage(source, pager, previous, started);
+                    return;
+                }
+                finishPage(source, pager, posts);
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                finishPage(source, pager, previous);
+            }
+        }, 250);
+    }
+
+    private static void finishPage(Object source, Object pager, List<Object> posts) {
+        try {
+            ArrayList<Object> fresh = new ArrayList<>(posts);
+            fresh.removeAll(snapshot);
+            Object pages = source.getClass().getMethod("f", List.class).invoke(source, fresh);
+            boolean[] appended = {false};
+            update(source, state -> {
+                try {
+                    List<?> old = (List<?>) field(state, "a");
+                    Object indexed = source.getClass().getMethod("c", int.class, List.class)
+                        .invoke(source, old.size(), pages);
+                    Class<?> persistent = Class.forName("gp3.g");
+                    Method append = null;
+                    for (Method method : persistent.getMethods())
+                        if ("addAll".equals(method.getName()) && method.getReturnType() == persistent
+                            && method.getParameterCount() == 1) append = method;
+                    if (append == null) throw new NoSuchMethodException("Persistent list append");
+                    Object joined = append.invoke(old, indexed);
+                    Object updated = copyPager(state, joined, false, hasMore(pager));
+                    appended[0] = true;
+                    return updated;
+                } catch (ReflectiveOperationException | RuntimeException error) {
+                    try { return copyPager(state, field(state, "a"), false, hasMore(pager)); }
+                    catch (ReflectiveOperationException ignored) { return state; }
+                }
+            });
+            if (!appended[0]) return;
+            ArrayList<Object> combined = new ArrayList<>(snapshot);
+            combined.addAll(fresh);
+            snapshot = Collections.unmodifiableList(combined);
+        } catch (ReflectiveOperationException | RuntimeException ignored) { }
+        finally { requesting = false; }
+    }
+
     /** Replace Reddit's discovered feed with the Home media snapshot. */
     public static Object initialMedia(Object source, Object original) {
         try {
@@ -352,10 +501,13 @@ public final class VerticalHomeFeed {
             if (!MARKER.equals(field(data, "a"))) return original;
             List<Object> posts = snapshot;
             if (posts.isEmpty()) return original;
+            Field requestedIndex = source.getClass().getDeclaredField("q");
+            requestedIndex.setAccessible(true);
+            requestedIndex.set(source, initialIndex);
             Class<?> linkType = Class.forName("com.reddit.domain.model.Link");
             return Class.forName("com.reddit.fullbleedplayer.data.p")
                 .getConstructor(ArrayList.class, linkType, int.class)
-                .newInstance(new ArrayList<>(posts), posts.get(0), 0);
+                .newInstance(new ArrayList<>(posts), posts.get(initialIndex), initialIndex);
         } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
     }
 
@@ -380,6 +532,8 @@ public final class VerticalHomeFeed {
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         return state;
     }
+
+    public static Object completed() { return kotlinUnit(); }
 
     private static Object kotlinUnit() {
         try {

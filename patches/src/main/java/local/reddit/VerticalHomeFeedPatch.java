@@ -222,6 +222,36 @@ public final class VerticalHomeFeedPatch {
                         if (hits != 1) throw new IllegalStateException("Provider flag changed: " + name);
                     }
 
+                    MutableMethod scroll = one(context.mutableClassDefBy(
+                        "Lcom/reddit/feeds/impl/ui/actions/d1;"), "b", "Ljava/lang/Object;", 3);
+                    int scrollSelf = scroll.getImplementation().getRegisterCount() - 4;
+                    scroll.getImplementation().addInstruction(0, new BuilderInstruction3rc(
+                        Opcode.INVOKE_STATIC_RANGE, scrollSelf, 2, ref("rememberPosition",
+                            Arrays.asList("Ljava/lang/Object;", "Ljava/lang/Object;"), "V")));
+
+                    MutableClass dataSource = context.mutableClassDefBy("Lcom/reddit/fullbleedplayer/data/j;");
+                    MutableMethod update = one(dataSource, "l", "V", 1);
+                    int updateSelf = update.getImplementation().getRegisterCount() - 2;
+                    update.getImplementation().addInstruction(0, new BuilderInstruction3rc(
+                        Opcode.INVOKE_STATIC_RANGE, updateSelf, 2, ref("wrapUpdate",
+                            Arrays.asList("Ljava/lang/Object;", "Lkotlin/jvm/functions/Function1;"),
+                            "Lkotlin/jvm/functions/Function1;")));
+                    update.getImplementation().addInstruction(1,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, updateSelf + 1));
+
+                    MutableMethod more = one(dataSource, "b", "Ljava/lang/Object;", 4);
+                    MutableMethodImplementation moreImpl = more.getImplementation();
+                    int moreSource = moreImpl.getRegisterCount() - 4;
+                    Label normalMore = moreImpl.newLabelForIndex(0);
+                    moreImpl.addInstruction(0, new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE,
+                        moreSource, 1, ref("loadMore", Collections.singletonList("Ljava/lang/Object;"), "Z")));
+                    moreImpl.addInstruction(1, new BuilderInstruction11x(Opcode.MOVE_RESULT, 0));
+                    moreImpl.addInstruction(2, new BuilderInstruction21t(Opcode.IF_EQZ, 0, normalMore));
+                    moreImpl.addInstruction(3, new BuilderInstruction35c(Opcode.INVOKE_STATIC, 0,
+                        0, 0, 0, 0, 0, ref("completed", Collections.emptyList(), "Ljava/lang/Object;")));
+                    moreImpl.addInstruction(4, new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, 0));
+                    moreImpl.addInstruction(5, new BuilderInstruction11x(Opcode.RETURN_OBJECT, 0));
+
                     MutableMethod initial = one(context.mutableClassDefBy(
                         "Lcom/reddit/fullbleedplayer/data/j;"), "a", "Ljava/lang/Object;", 4);
                     MutableMethodImplementation initialImpl = initial.getImplementation();

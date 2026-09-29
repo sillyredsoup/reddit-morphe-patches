@@ -3,7 +3,7 @@
 These two independent patches target Reddit 2026.14.0:
 
 - **Reddit - Hide app posts** hides Reddit Dev Platform games and apps in listings. It adds a **Hide games in feed** switch under Reddit's Morphe settings → Feed. The switch defaults to on and applies to newly loaded listings. This patch requires the upstream Morphe settings patch for the switch.
-- **Reddit - NSFW mode** uses the Inbox slot for an NSFW button in the bottom bar. It keeps the Inbox icon; the Home and Games buttons stay in place. Turning the mode on shows unblurred NSFW posts and filters out non-NSFW posts; turning it off restores the Show NSFW and Blur NSFW values saved when the mode was enabled.
+- **Reddit - NSFW mode** uses the Inbox slot for an NSFW button in the bottom bar. It keeps the Inbox icon; the Home and Games buttons stay in place. Turning it on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and restores the normal feed.
 
 Add the GitHub source in Morphe Manager:
 
@@ -19,4 +19,4 @@ Run `./build-local.sh` to build `reddit-mode.mpp` with public build tools. The b
 
 ## Verification
 
-Morphe Desktop discovers both patches and applies them together with the upstream Reddit patches to the 2026.14.0 APKM. The button, settings switch, and filtering still need device testing.
+Morphe Desktop discovers both patches and applies them together with the upstream Reddit patches to the 2026.14.0 APKM. The app post filter still needs longer device testing.

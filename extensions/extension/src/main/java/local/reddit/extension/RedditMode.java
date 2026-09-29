@@ -1,12 +1,11 @@
 package local.reddit.extension;
 
 import android.app.Activity;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.widget.Toast;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
 import kotlin.coroutines.jvm.internal.ContinuationImpl;
@@ -17,15 +16,13 @@ import wl3.a;
 /** Runtime hooks for Reddit 2026.14.0. */
 public final class RedditMode {
     private static final String PREFS = "local.reddit.mode";
-    private static final String ENABLED = "nsfw_only";
-    private static final String HAD_SHOW = "old_show";
-    private static final String HAD_BLUR = "old_blur";
+    private static final String NSFW_ONLY = "nsfw_filter_active";
     private static volatile Object repository;
-    private static volatile Activity activity;
     private static volatile Object navScreen;
     private static volatile String inboxLabel;
     private static volatile int nsfwLabelId;
     private static volatile boolean mode;
+    private static final Map<String, Boolean> postNsfw = new ConcurrentHashMap<>();
 
     private RedditMode() {}
 
@@ -38,11 +35,8 @@ public final class RedditMode {
         } catch (RuntimeException ignored) { }
         try {
             Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
-            if (current != null) {
-                activity = current;
-                mode = current.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getBoolean(ENABLED, false);
-            }
+            if (current != null)
+                mode = current.getSharedPreferences(PREFS, 0).getBoolean(NSFW_ONLY, false);
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
@@ -107,8 +101,9 @@ public final class RedditMode {
     public static boolean selected(Object descriptor, Function0<?> click, String label,
                                    boolean original) {
         try {
-            if ("NSFW".equals(descriptor.getClass().getField("a").get(descriptor)))
+            if ("NSFW".equals(descriptor.getClass().getField("a").get(descriptor))) {
                 return mode;
+            }
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         return original;
     }
@@ -130,36 +125,50 @@ public final class RedditMode {
         return kept == null ? original : kept;
     }
 
+    public static Object filterConverted(Object element, Object converted) {
+        if (element == null) return converted;
+        String type = element.getClass().getName();
+        if (!"ym1.u1".equals(type) && !"ym1.z".equals(type)) return converted;
+        try {
+            String linkId = (String) element.getClass().getMethod("getLinkId").invoke(element);
+            boolean nsfw = hasNsfwIndicator(element, 0,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+            if (linkId != null) postNsfw.put(linkId, nsfw);
+            return mode && !nsfw ? null : converted;
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return converted; }
+    }
+
+    public static boolean shouldHideRenderedPost(Object section) {
+        if (!mode || section == null) return false;
+        try {
+            String id = (String) section.getClass().getField("a").get(section);
+            return !Boolean.TRUE.equals(postNsfw.get(id));
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
     public static void toggle(Object screen) {
         Activity current = null;
         try {
             current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         if (current == null) return;
-        activity = current;
         Object repo = repository;
         if (repo == null) {
             Toast.makeText(current, "NSFW settings are not ready", Toast.LENGTH_SHORT).show();
             return;
         }
-        SharedPreferences prefs = current.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         try {
-            if (!mode) {
-                boolean oldShow = getter(repo, "i");
-                boolean oldBlur = getter(repo, "e");
+            boolean show = getter(repo, "i");
+            if (!show) {
                 set(repo, "y", true);
                 set(repo, "q", false);
-                prefs.edit().putBoolean(HAD_SHOW, oldShow).putBoolean(HAD_BLUR, oldBlur)
-                    .putBoolean(ENABLED, true).apply();
                 mode = true;
             } else {
-                boolean oldShow = prefs.getBoolean(HAD_SHOW, false);
-                boolean oldBlur = prefs.getBoolean(HAD_BLUR, true);
-                set(repo, "y", oldShow);
-                set(repo, "q", oldBlur);
-                prefs.edit().putBoolean(ENABLED, false).apply();
+                set(repo, "y", false);
+                set(repo, "q", true);
                 mode = false;
             }
+            current.getSharedPreferences(PREFS, 0).edit().putBoolean(NSFW_ONLY, mode).apply();
             Toast.makeText(current, mode ? "NSFW mode on" : "NSFW mode off", Toast.LENGTH_SHORT).show();
             current.recreate();
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
@@ -171,30 +180,36 @@ public final class RedditMode {
         return (Boolean) repo.getClass().getMethod(name).invoke(repo);
     }
 
-    private static void set(Object repo, String name, boolean value) throws ReflectiveOperationException {
-        for (Method method : repo.getClass().getMethods()) {
-            if (!method.getName().equals(name) || method.getParameterTypes().length != 2
-                || method.getParameterTypes()[0] != boolean.class) continue;
-            a<Object> completion = new Completion();
-            Object continuation = name.equals("q")
-                ? new LambdaCompletion(completion) : new ImplCompletion(completion);
-            method.invoke(repo, value, continuation);
-            return;
-        }
-        throw new NoSuchMethodException(name);
-    }
-
     private static boolean flag(Object value, String name) {
         try { return (Boolean) value.getClass().getMethod(name).invoke(value); }
         catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
     }
 
-    private static Object kotlinUnit() {
-        try {
-            Class<?> type = Class.forName("kotlin.Unit");
-            try { return type.getField("a").get(null); }
-            catch (NoSuchFieldException missing) { return type.getField("INSTANCE").get(null); }
-        } catch (ReflectiveOperationException | RuntimeException ignored) { return null; }
+    private static boolean hasNsfwIndicator(Object value, int depth, Set<Object> seen) {
+        if (value == null || depth > 5 || !seen.add(value)) return false;
+        if ("ym1.v0".equals(value.getClass().getName())) {
+            try {
+                Object indicators = value.getClass().getField("j").get(value);
+                if (indicators instanceof Iterable<?>)
+                    for (Object indicator : (Iterable<?>) indicators)
+                        if (indicator instanceof Enum<?> && "NSFW".equals(((Enum<?>) indicator).name()))
+                            return true;
+            } catch (ReflectiveOperationException | RuntimeException ignored) { }
+            return false;
+        }
+        if (value instanceof Iterable<?>) {
+            for (Object child : (Iterable<?>) value)
+                if (hasNsfwIndicator(child, depth + 1, seen)) return true;
+            return false;
+        }
+        if (!value.getClass().getName().startsWith("ym1.")) return false;
+        for (Field field : value.getClass().getFields()) {
+            if (Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive()) continue;
+            try {
+                if (hasNsfwIndicator(field.get(value), depth + 1, seen)) return true;
+            } catch (ReflectiveOperationException | RuntimeException ignored) { }
+        }
+        return false;
     }
 
     private static Object findLink(Object value, int depth, Set<Object> seen) {
@@ -219,6 +234,27 @@ public final class RedditMode {
                 } catch (ReflectiveOperationException | RuntimeException ignored) { }
             }
         return null;
+    }
+
+    private static void set(Object repo, String name, boolean value) throws ReflectiveOperationException {
+        for (Method method : repo.getClass().getMethods()) {
+            if (!method.getName().equals(name) || method.getParameterTypes().length != 2
+                || method.getParameterTypes()[0] != boolean.class) continue;
+            a<Object> completion = new Completion();
+            Object continuation = name.equals("q")
+                ? new LambdaCompletion(completion) : new ImplCompletion(completion);
+            method.invoke(repo, value, continuation);
+            return;
+        }
+        throw new NoSuchMethodException(name);
+    }
+
+    private static Object kotlinUnit() {
+        try {
+            Class<?> type = Class.forName("kotlin.Unit");
+            try { return type.getField("a").get(null); }
+            catch (NoSuchFieldException missing) { return type.getField("INSTANCE").get(null); }
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return null; }
     }
 
     private static final class Completion implements a<Object> {

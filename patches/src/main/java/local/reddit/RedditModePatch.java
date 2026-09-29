@@ -5,11 +5,14 @@ import app.morphe.patcher.util.proxy.mutableTypes.MutableClass;
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod;
 import com.android.tools.smali.dexlib2.Opcode;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21t;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c;
+import com.android.tools.smali.dexlib2.builder.Label;
 import com.android.tools.smali.dexlib2.builder.BuilderInstruction;
 import com.android.tools.smali.dexlib2.iface.instruction.*;
-import com.android.tools.smali.dexlib2.iface.reference.FieldReference;
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
 import com.android.tools.smali.dexlib2.iface.reference.TypeReference;
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference;
@@ -30,7 +33,7 @@ public final class RedditModePatch {
     public static synchronized BytecodePatch getRedditModePatch() {
         if (patch != null) return patch;
         patch = PatchKt.bytecodePatch("Reddit - NSFW mode",
-            "Uses the Inbox slot for an NSFW-only button with reversible visibility settings.",
+            "Uses the Inbox slot to show only NSFW posts and toggle NSFW account settings.",
             false, builder -> {
                 builder.compatibleWith(new Compatibility("com.reddit.frontpage", "Reddit", null,
                     ApkFileType.APKM, 0xFF4500, null,
@@ -57,6 +60,38 @@ public final class RedditModePatch {
                         hooked++;
                     }
                     if (hooked != 1) throw new IllegalStateException("Listing.getChildren shape changed");
+
+                    MutableMethod converter = one(context.mutableClassDefBy(
+                        "Lcom/reddit/achievements/profile/t;"), "l",
+                        "Lcom/reddit/feeds/ui/composables/g;", 1);
+                    List<Instruction> converterCode = new ArrayList<>(converter.getImplementation().getInstructions());
+                    int converted = 0;
+                    for (int i = converterCode.size() - 2; i >= 0; i--) {
+                        Instruction ins = converterCode.get(i);
+                        if (ins.getOpcode() != Opcode.INVOKE_INTERFACE || !(ins instanceof FiveRegisterInstruction)
+                            || !(ins instanceof ReferenceInstruction)) continue;
+                        Object ref = ((ReferenceInstruction) ins).getReference();
+                        if (!(ref instanceof MethodReference)
+                            || !"Lxn1/a;".equals(((MethodReference) ref).getDefiningClass())
+                            || !"a".equals(((MethodReference) ref).getName())
+                            || converterCode.get(i + 1).getOpcode() != Opcode.MOVE_RESULT_OBJECT) continue;
+                        int element = ((FiveRegisterInstruction) ins).getRegisterE();
+                        int result = ((OneRegisterInstruction) converterCode.get(i + 1)).getRegisterA();
+                        converter.getImplementation().addInstruction(i + 2,
+                            new BuilderInstruction35c(Opcode.INVOKE_STATIC, 2, element, result, 0, 0, 0,
+                                new ImmutableMethodReference(EXT, "filterConverted",
+                                    Arrays.asList("Ljava/lang/Object;", "Ljava/lang/Object;"), "Ljava/lang/Object;")));
+                        converter.getImplementation().addInstruction(i + 3,
+                            new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, result));
+                        converter.getImplementation().addInstruction(i + 4,
+                            new BuilderInstruction21c(Opcode.CHECK_CAST, result,
+                                new ImmutableTypeReference("Lcom/reddit/feeds/ui/composables/g;")));
+                        converted++;
+                    }
+                    if (converted != 1) throw new IllegalStateException("Feed converter shape changed: " + converted);
+
+                    hookPostRenderer(context.mutableClassDefBy("Lcom/reddit/feeds/ui/composables/feed/m;"));
+                    hookPostRenderer(context.mutableClassDefBy("Lcom/reddit/feeds/impl/ui/composables/j;"));
 
                     MutableMethod nav = one(context.mutableClassDefBy(NAV), "J5", "Lgp3/g;", 1);
                     int resources = nav.getImplementation().getRegisterCount() - 1;
@@ -157,6 +192,22 @@ public final class RedditModePatch {
         int result = 0;
         for (CharSequence p : method.getParameterTypes()) result += ("J".contentEquals(p) || "D".contentEquals(p)) ? 2 : 1;
         return result;
+    }
+
+    private static void hookPostRenderer(MutableClass owner) {
+        MutableMethod render = one(owner, "b", "V", 3);
+        int self = render.getImplementation().getRegisterCount() - 4;
+        if (self < 1) throw new IllegalStateException("No free feed renderer register: " + owner.getType());
+        Label show = render.getImplementation().newLabelForIndex(0);
+        render.getImplementation().addInstruction(0,
+            call(EXT, "shouldHideRenderedPost", "Z",
+                Collections.singletonList("Ljava/lang/Object;"), self));
+        render.getImplementation().addInstruction(1,
+            new BuilderInstruction11x(Opcode.MOVE_RESULT, 0));
+        render.getImplementation().addInstruction(2,
+            new BuilderInstruction21t(Opcode.IF_EQZ, 0, show));
+        render.getImplementation().addInstruction(3,
+            new BuilderInstruction10x(Opcode.RETURN_VOID));
     }
 
     private static MutableMethod one(MutableClass owner, String name, String returns, int params) {

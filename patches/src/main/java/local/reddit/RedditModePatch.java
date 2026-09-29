@@ -20,15 +20,14 @@ public final class RedditModePatch {
     private static final String VERSION = "2026.14.0";
     private static final String EXT = "Llocal/reddit/extension/RedditMode;";
     private static final String NAV = "Lcom/reddit/launch/bottomnav/BottomNavScreen;";
-    private static final String ITEM = "Lcom/reddit/widget/bottomnav/h;";
     private static BytecodePatch patch;
     private RedditModePatch() {}
 
     @SuppressWarnings({"unchecked", "deprecation"})
     public static synchronized BytecodePatch getRedditModePatch() {
         if (patch != null) return patch;
-        patch = PatchKt.bytecodePatch("Reddit - Hide apps and NSFW mode",
-            "Hides interactive posts and adds an NSFW-only bottom bar mode with reversible visibility settings.",
+        patch = PatchKt.bytecodePatch("Reddit - NSFW mode",
+            "Adds an NSFW-only bottom bar button with reversible visibility settings.",
             false, builder -> {
                 builder.compatibleWith(new Compatibility("com.reddit.frontpage", "Reddit", null,
                     ApkFileType.APKM, 0xFF4500, null,
@@ -56,16 +55,11 @@ public final class RedditModePatch {
                     }
                     if (hooked != 1) throw new IllegalStateException("Listing.getChildren shape changed");
 
-                    MutableMethod itemInit = one(context.mutableClassDefBy(ITEM), "<init>", "V", 2);
-                    int itemThis = itemInit.getImplementation().getRegisterCount() - 3;
-                    beforeReturns(itemInit, call(EXT, "rememberItem", "V",
-                        Collections.singletonList("Ljava/lang/Object;"), itemThis));
-
                     MutableMethod nav = one(context.mutableClassDefBy(NAV), "J5", "Lgp3/g;", 1);
                     int resources = nav.getImplementation().getRegisterCount() - 1;
                     nav.getImplementation().addInstruction(0,
                         new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, resources - 1, 2,
-                            new ImmutableMethodReference(EXT, "setGamesLabel",
+                            new ImmutableMethodReference(EXT, "initialize",
                                 Arrays.asList("Ljava/lang/Object;", "Landroid/content/res/Resources;"), "V")));
                     List<Instruction> navCode = new ArrayList<>(nav.getImplementation().getInstructions());
                     int builds = 0;

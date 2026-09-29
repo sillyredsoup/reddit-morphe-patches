@@ -1,32 +1,20 @@
 # Reddit patches for Morphe
 
-This project targets Reddit 2026.14.0.
+These two independent patches target Reddit 2026.14.0:
 
-Add this source in Morphe on your phone:
+- **Reddit - Hide app posts** hides Reddit Dev Platform games and apps in listings. It adds a **Hide games in feed** switch under Reddit's Morphe settings → Feed. The switch defaults to on and applies to newly loaded listings. This patch requires the upstream Morphe settings patch for the switch.
+- **Reddit - NSFW mode** adds a separate NSFW button to the bottom bar. The existing Home and Games buttons stay in place. Turning the mode on shows unblurred NSFW posts and filters out non-NSFW posts; turning it off restores the Show NSFW and Blur NSFW values saved when the mode was enabled.
+
+Add the GitHub source in Morphe Manager:
 
 https://morphe.software/add-source?github=sillyredsoup/reddit-morphe-patches
 
-In Expert mode, keep the built-in Morphe source selected alongside this one,
-then enable **Reddit - Hide apps and NSFW mode** in this source's tab.
-
-The **Reddit - Hide apps and NSFW mode** patch removes interactive Reddit App/game posts from listings. It also adds a separate NSFW bottom bar button. Enabling it saves the existing Show NSFW and Blur NSFW values, sets Show NSFW on and Blur NSFW off, and filters listings to NSFW posts. Tapping again restores the saved values.
-
-The button works with Morphe's upstream Hide navigation buttons patch and its Hide Games setting. It reuses Reddit's Games tab UI, so the icon is still the Games icon. The new label is NSFW, and the button highlights while the mode is on. Only this new button toggles the mode; the original Games action stays intact. Reddit must have its Games feature enabled for this descriptor to be available.
+In Expert mode, select both this source and the built-in Morphe source. Select either or both patches here, then select the upstream Reddit patches you want. **Hide navigation buttons** with **Hide Games** can be used alongside the NSFW button.
 
 ## Local build
 
-The credential-free local build downloads public tools on first use:
+Run `./build-local.sh` to build `reddit-mode.mpp` with public build tools. The bundle can also be imported as a Local source. This patch is pinned to Reddit 2026.14.0 and fails if its target bytecode changes.
 
-```sh
-./build-local.sh
-```
+## Verification
 
-The output is `reddit-mode.mpp`. Add it alongside Morphe's upstream patch bundle, select **Reddit - Hide apps and NSFW mode**, and keep upstream Reddit patches selected as usual. This patch is pinned to the APK version above and fails if its bytecode fingerprints change.
-
-The same bundle can also be added as a Local source after copying the
-`reddit-mode.mpp` file to the phone. Morphe's Simple mode selects one source
-at a time; Expert mode allows both source tabs in the same patching run.
-
-## Current verification
-
-The bundle compiles and Morphe Desktop applies it to the 2026.14.0 APKM together with 18 default upstream patches. The UI, account setting calls, and filter still need device testing.
+Morphe Desktop discovers both patches and applies them together with the upstream Reddit patches to the 2026.14.0 APKM. The button, settings switch, and filtering still need device testing.

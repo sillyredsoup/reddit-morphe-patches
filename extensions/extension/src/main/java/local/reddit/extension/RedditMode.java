@@ -22,15 +22,13 @@ public final class RedditMode {
     private static final String HAD_SHOW = "old_show";
     private static final String HAD_BLUR = "old_blur";
     private static volatile Object repository;
-    private static volatile Object gameItem;
-    private static volatile String gameLabel;
     private static volatile Activity activity;
     private static volatile Object navScreen;
     private static volatile boolean mode;
 
     private RedditMode() {}
 
-    public static void setGamesLabel(Object screen, Resources resources) {
+    public static void initialize(Object screen, Resources resources) {
         navScreen = screen;
         try {
             Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
@@ -40,25 +38,14 @@ public final class RedditMode {
                     .getBoolean(ENABLED, false);
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
-        try {
-            int id = resources.getIdentifier("label_games", "string", "com.reddit.frontpage");
-            if (id != 0) gameLabel = resources.getString(id);
-        } catch (RuntimeException ignored) { }
-    }
-
-    public static void rememberItem(Object item) {
-        try {
-            String label = (String) item.getClass().getField("a").get(item);
-            if (label.equals(gameLabel) || (gameLabel == null && "Games".equals(label)))
-                gameItem = item;
-        } catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
     @SuppressWarnings("unchecked")
     public static void addButton(Object builder) {
-        Object original = gameItem;
-        if (original == null || !(builder instanceof List<?>)) return;
+        if (!(builder instanceof List<?>) || ((List<?>) builder).isEmpty()) return;
         try {
+            // Home is the first tab in Reddit 2026.14.0 and is always present.
+            Object original = ((List<?>) builder).get(0);
             Object content = original.getClass().getField("b").get(original);
             Constructor<?> ctor = original.getClass().getConstructor(String.class, content.getClass());
             Object button = ctor.newInstance("NSFW", content);
@@ -92,15 +79,12 @@ public final class RedditMode {
     }
 
     public static List<?> filterListing(List<?> original) {
-        if (original == null || original.isEmpty()) return original;
-        boolean nsfw = mode;
+        if (!mode || original == null || original.isEmpty()) return original;
         ArrayList<Object> kept = null;
         for (int i = 0; i < original.size(); i++) {
             Object item = original.get(i);
             Object link = findLink(item, 0, Collections.newSetFromMap(new IdentityHashMap<>()));
-            boolean drop = link != null &&
-                (flag(link, "getIsDevPlatformCustomPost") ||
-                    (nsfw && !flag(link, "getOver18")));
+            boolean drop = link != null && !flag(link, "getOver18");
             if (drop) {
                 if (kept == null) {
                     kept = new ArrayList<>(original.size());

@@ -23,8 +23,11 @@ jobs:
       - name: Verify Manager source metadata
         run: |
           python3 -c 'import json, datetime; metadata = json.load(open("patches-bundle.json")); datetime.datetime.strptime(metadata["created_at"], "%Y-%m-%dT%H:%M:%S"); assert metadata["download_url"].endswith(".mpp")'
-      - name: Verify Morphe discovers patch
-        run: java -jar .local-tools/morphe-desktop.jar list-patches --patches=reddit-mode.mpp --filter-package-name=com.reddit.frontpage
+      - name: Verify Morphe discovers both patches
+        run: |
+          java -jar .local-tools/morphe-desktop.jar list-patches --patches=reddit-mode.mpp --filter-package-name=com.reddit.frontpage > /tmp/reddit-patch-list.txt
+          grep -q 'Name: Reddit - Hide app posts' /tmp/reddit-patch-list.txt
+          grep -q 'Name: Reddit - NSFW mode' /tmp/reddit-patch-list.txt
       - uses: actions/upload-artifact@v4
         with:
           name: reddit-mode-mpp

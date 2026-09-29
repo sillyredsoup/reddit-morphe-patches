@@ -82,10 +82,24 @@ public final class VerticalHomeFeedPatch {
                                     && "Lwe/w;".equals(method.getDefiningClass());
                             if (!match) continue;
                             int builderRegister = ((FiveRegisterInstruction) ins).getRegisterC();
-                            nav.getImplementation().addInstruction(i,
-                                new BuilderInstruction35c(Opcode.INVOKE_STATIC, 1,
-                                    builderRegister, 0, 0, 0, 0,
-                                    ref("addButton", Collections.singletonList("Ljava/lang/Object;"), "V")));
+                            BuilderInstruction35c hook = new BuilderInstruction35c(Opcode.INVOKE_STATIC, 1,
+                                builderRegister, 0, 0, 0, 0,
+                                ref("addButton", Collections.singletonList("Ljava/lang/Object;"), "V"));
+                            if ("K5".equals(name)) {
+                                // The final return in K5 is a jump target. Inserting before it
+                                // leaves its label on w.M, so the new call is skipped. Replace
+                                // the labelled instruction and append an equivalent original.
+                                FiveRegisterInstruction original = (FiveRegisterInstruction) ins;
+                                nav.getImplementation().replaceInstruction(i, hook);
+                                nav.getImplementation().addInstruction(i + 1,
+                                    new BuilderInstruction35c(ins.getOpcode(),
+                                        original.getRegisterCount(), original.getRegisterC(),
+                                        original.getRegisterD(), original.getRegisterE(),
+                                        original.getRegisterF(), original.getRegisterG(),
+                                        ((ReferenceInstruction) ins).getReference()));
+                            } else {
+                                nav.getImplementation().addInstruction(i, hook);
+                            }
                             builds++;
                         }
                         if (builds != 1) throw new IllegalStateException("Bottom bar changed: " + name);

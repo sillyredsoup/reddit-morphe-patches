@@ -9,14 +9,17 @@ if [[ -z "${MORPHE_DESKTOP_JAR:-}" || -z "${R8_JAR:-}" || -z "${ANDROID_JAR:-}" 
 fi
 build_dir="$repo_dir/.local-build"
 rm -rf "$build_dir"
-mkdir -p "$build_dir/patch-classes" "$build_dir/patch-dex" "$build_dir/bundle/META-INF" "$build_dir/bundle/extensions"
+mkdir -p "$build_dir/patch-classes" "$build_dir/patch-dex" "$build_dir/reddit-api" "$build_dir/bundle/META-INF" "$build_dir/bundle/extensions"
+javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/reddit-api" \
+    "$repo_dir/build-support/reddit-api/wl3/a.java" \
+    "$repo_dir"/build-support/reddit-api/kotlin/coroutines/jvm/internal/*.java
 javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/patch-classes" "$repo_dir"/patches/src/main/java/local/reddit/*.java
 java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 28 --lib "$ANDROID_JAR" --classpath "$MORPHE_DESKTOP_JAR" --output "$build_dir/patch-dex" "$build_dir"/patch-classes/local/reddit/*.class
 for extension in RedditMode AppPostFilter; do
     extension_dir="$build_dir/$extension"
     mkdir -p "$extension_dir/classes" "$extension_dir/dex"
-    javac -cp "$MORPHE_DESKTOP_JAR:$ANDROID_JAR" -d "$extension_dir/classes" "$repo_dir/extensions/extension/src/main/java/local/reddit/extension/$extension.java"
-    java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 26 --lib "$ANDROID_JAR" --output "$extension_dir/dex" "$extension_dir"/classes/local/reddit/extension/*.class
+    javac -cp "$build_dir/reddit-api:$MORPHE_DESKTOP_JAR:$ANDROID_JAR" -d "$extension_dir/classes" "$repo_dir/extensions/extension/src/main/java/local/reddit/extension/$extension.java"
+    java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 26 --lib "$ANDROID_JAR" --classpath "$build_dir/reddit-api" --output "$extension_dir/dex" "$extension_dir"/classes/local/reddit/extension/*.class
 done
 cp -R "$build_dir/patch-classes/." "$build_dir/bundle/"
 cp "$build_dir/patch-dex/classes.dex" "$build_dir/bundle/classes.dex"
@@ -26,8 +29,8 @@ cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
 Description: Independent app post filter and NSFW bottom bar mode
-Version: 0.2.1
-Timestamp: 1790690117000
+Version: 0.2.2
+Timestamp: 1790690892000
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

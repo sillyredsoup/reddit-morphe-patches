@@ -7,13 +7,12 @@ import android.content.res.Resources;
 import android.widget.Toast;
 import java.lang.reflect.*;
 import java.util.*;
-import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
 import kotlin.coroutines.jvm.internal.ContinuationImpl;
 import kotlin.coroutines.jvm.internal.SuspendLambda;
 import kotlin.jvm.functions.Function0;
-import kotlin.Unit;
+import wl3.a;
 
 /** Runtime hooks for Reddit 2026.14.0. */
 public final class RedditMode {
@@ -99,7 +98,7 @@ public final class RedditMode {
             if ("NSFW".equals(label)) return () -> {
                 Object screen = navScreen;
                 if (screen != null) toggle(screen);
-                return Unit.INSTANCE;
+                return kotlinUnit();
             };
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         return original;
@@ -148,22 +147,22 @@ public final class RedditMode {
             if (!mode) {
                 boolean oldShow = getter(repo, "i");
                 boolean oldBlur = getter(repo, "e");
+                set(repo, "y", true);
+                set(repo, "q", false);
                 prefs.edit().putBoolean(HAD_SHOW, oldShow).putBoolean(HAD_BLUR, oldBlur)
                     .putBoolean(ENABLED, true).apply();
                 mode = true;
-                set(repo, "y", true);
-                set(repo, "q", false);
             } else {
                 boolean oldShow = prefs.getBoolean(HAD_SHOW, false);
                 boolean oldBlur = prefs.getBoolean(HAD_BLUR, true);
-                mode = false;
-                prefs.edit().putBoolean(ENABLED, false).apply();
                 set(repo, "y", oldShow);
                 set(repo, "q", oldBlur);
+                prefs.edit().putBoolean(ENABLED, false).apply();
+                mode = false;
             }
             Toast.makeText(current, mode ? "NSFW mode on" : "NSFW mode off", Toast.LENGTH_SHORT).show();
             current.recreate();
-        } catch (ReflectiveOperationException | RuntimeException error) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             Toast.makeText(current, "Could not change NSFW settings", Toast.LENGTH_LONG).show();
         }
     }
@@ -176,7 +175,7 @@ public final class RedditMode {
         for (Method method : repo.getClass().getMethods()) {
             if (!method.getName().equals(name) || method.getParameterTypes().length != 2
                 || method.getParameterTypes()[0] != boolean.class) continue;
-            Continuation<Object> completion = new Completion();
+            a<Object> completion = new Completion();
             Object continuation = name.equals("q")
                 ? new LambdaCompletion(completion) : new ImplCompletion(completion);
             method.invoke(repo, value, continuation);
@@ -188,6 +187,14 @@ public final class RedditMode {
     private static boolean flag(Object value, String name) {
         try { return (Boolean) value.getClass().getMethod(name).invoke(value); }
         catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+    }
+
+    private static Object kotlinUnit() {
+        try {
+            Class<?> type = Class.forName("kotlin.Unit");
+            try { return type.getField("a").get(null); }
+            catch (NoSuchFieldException missing) { return type.getField("INSTANCE").get(null); }
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return null; }
     }
 
     private static Object findLink(Object value, int depth, Set<Object> seen) {
@@ -214,18 +221,18 @@ public final class RedditMode {
         return null;
     }
 
-    private static final class Completion implements Continuation<Object> {
+    private static final class Completion implements a<Object> {
         @Override public CoroutineContext getContext() { return EmptyCoroutineContext.INSTANCE; }
         @Override public void resumeWith(Object result) { }
     }
 
     private static final class ImplCompletion extends ContinuationImpl {
-        ImplCompletion(Continuation<Object> completion) { super(completion); }
+        ImplCompletion(a<Object> completion) { super(completion); }
         @Override protected Object invokeSuspend(Object result) { return result; }
     }
 
     private static final class LambdaCompletion extends SuspendLambda {
-        LambdaCompletion(Continuation<Object> completion) { super(0, completion); }
+        LambdaCompletion(a<Object> completion) { super(0, completion); }
         @Override protected Object invokeSuspend(Object result) { return result; }
     }
 }

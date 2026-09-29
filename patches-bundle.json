@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-09-29T13:55:17",
-  "description": "Two Reddit 2026.14.0 patches: in-app feed switch and NSFW mode in the Inbox slot.",
-  "download_url": "https://github.com/sillyredsoup/reddit-morphe-patches/releases/download/v0.2.1/patches-0.2.1.mpp",
+  "created_at": "2026-09-29T14:08:12",
+  "description": "Reddit 2026.14.0 feed filter and NSFW toggle with corrected click runtime.",
+  "download_url": "https://github.com/sillyredsoup/reddit-morphe-patches/releases/download/v0.2.2/patches-0.2.2.mpp",
   "signature_download_url": "",
-  "version": "0.2.1"
+  "version": "0.2.2"
 }

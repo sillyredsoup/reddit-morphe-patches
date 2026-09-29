@@ -1,5 +1,5 @@
 {
-  "version": "0.2.4",
+  "version": "0.2.5",
   "patches": [
     {
       "name": "Reddit - Hide app posts",
@@ -30,7 +30,7 @@
     },
     {
       "name": "Reddit - NSFW mode",
-      "description": "Uses the Inbox slot to show only NSFW posts and toggle NSFW account settings.",
+      "description": "Shows only NSFW posts when on and only non-NSFW posts when off.",
       "default": false,
       "category": null,
       "dependencies": [],

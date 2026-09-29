@@ -111,12 +111,12 @@ public final class RedditMode {
     }
 
     public static List<?> filterListing(List<?> original) {
-        if (!mode || original == null || original.isEmpty()) return original;
+        if (original == null || original.isEmpty()) return original;
         ArrayList<Object> kept = null;
         for (int i = 0; i < original.size(); i++) {
             Object item = original.get(i);
             Object link = findLink(item, 0, Collections.newSetFromMap(new IdentityHashMap<>()));
-            boolean drop = link != null && !flag(link, "getOver18");
+            boolean drop = link != null && flag(link, "getOver18") != mode;
             if (drop) {
                 if (kept == null) {
                     kept = new ArrayList<>(original.size());
@@ -136,15 +136,17 @@ public final class RedditMode {
             boolean nsfw = hasNsfwIndicator(element, 0,
                 Collections.newSetFromMap(new IdentityHashMap<>()));
             if (linkId != null) postNsfw.put(linkId, nsfw);
-            return mode && !nsfw ? null : converted;
+            return nsfw == mode ? converted : null;
         } catch (ReflectiveOperationException | RuntimeException ignored) { return converted; }
     }
 
     public static boolean shouldHideRenderedPost(Object section) {
-        if (!(Boolean) modeState.getValue() || section == null) return false;
+        boolean nsfwOnly = (Boolean) modeState.getValue();
+        if (section == null) return false;
         try {
             String id = (String) section.getClass().getField("a").get(section);
-            return !Boolean.TRUE.equals(postNsfw.get(id));
+            Boolean nsfw = postNsfw.get(id);
+            return nsfw == null ? nsfwOnly : nsfw != nsfwOnly;
         } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
     }
 

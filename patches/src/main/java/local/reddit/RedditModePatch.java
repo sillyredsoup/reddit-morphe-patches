@@ -33,7 +33,7 @@ public final class RedditModePatch {
     public static synchronized BytecodePatch getRedditModePatch() {
         if (patch != null) return patch;
         patch = PatchKt.bytecodePatch("Reddit - NSFW mode",
-            "Uses the Inbox slot to show only NSFW posts and toggle NSFW account settings.",
+            "Shows only NSFW posts when on and only non-NSFW posts when off.",
             false, builder -> {
                 builder.compatibleWith(new Compatibility("com.reddit.frontpage", "Reddit", null,
                     ApkFileType.APKM, 0xFF4500, null,

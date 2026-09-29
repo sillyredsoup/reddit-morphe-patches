@@ -12,6 +12,7 @@ rm -rf "$build_dir"
 mkdir -p "$build_dir/patch-classes" "$build_dir/patch-dex" "$build_dir/reddit-api" "$build_dir/bundle/META-INF" "$build_dir/bundle/extensions"
 javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/reddit-api" \
     "$repo_dir/build-support/reddit-api/wl3/a.java" \
+    "$repo_dir"/build-support/reddit-api/androidx/compose/runtime/*.java \
     "$repo_dir"/build-support/reddit-api/kotlin/coroutines/jvm/internal/*.java
 javac -cp "$MORPHE_DESKTOP_JAR" -d "$build_dir/patch-classes" "$repo_dir"/patches/src/main/java/local/reddit/*.java
 java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 28 --lib "$ANDROID_JAR" --classpath "$MORPHE_DESKTOP_JAR" --output "$build_dir/patch-dex" "$build_dir"/patch-classes/local/reddit/*.class
@@ -29,8 +30,8 @@ cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
 Description: Independent app post filter and NSFW bottom bar mode
-Version: 0.2.3
-Timestamp: 1790692479000
+Version: 0.2.4
+Timestamp: 1790693841000
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

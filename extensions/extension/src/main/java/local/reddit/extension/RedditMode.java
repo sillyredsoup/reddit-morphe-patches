@@ -22,6 +22,8 @@ public final class RedditMode {
     private static volatile String inboxLabel;
     private static volatile int nsfwLabelId;
     private static volatile boolean mode;
+    private static final androidx.compose.runtime.o1 modeState =
+        androidx.compose.runtime.j.B(Boolean.FALSE);
     private static final Map<String, Boolean> postNsfw = new ConcurrentHashMap<>();
 
     private RedditMode() {}
@@ -36,7 +38,7 @@ public final class RedditMode {
         try {
             Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
             if (current != null)
-                mode = current.getSharedPreferences(PREFS, 0).getBoolean(NSFW_ONLY, false);
+                setMode(current.getSharedPreferences(PREFS, 0).getBoolean(NSFW_ONLY, false));
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
@@ -102,7 +104,7 @@ public final class RedditMode {
                                    boolean original) {
         try {
             if ("NSFW".equals(descriptor.getClass().getField("a").get(descriptor))) {
-                return mode;
+                return (Boolean) modeState.getValue();
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         return original;
@@ -139,7 +141,7 @@ public final class RedditMode {
     }
 
     public static boolean shouldHideRenderedPost(Object section) {
-        if (!mode || section == null) return false;
+        if (!(Boolean) modeState.getValue() || section == null) return false;
         try {
             String id = (String) section.getClass().getField("a").get(section);
             return !Boolean.TRUE.equals(postNsfw.get(id));
@@ -162,17 +164,47 @@ public final class RedditMode {
             if (!show) {
                 set(repo, "y", true);
                 set(repo, "q", false);
-                mode = true;
+                setMode(true);
             } else {
                 set(repo, "y", false);
                 set(repo, "q", true);
-                mode = false;
+                setMode(false);
             }
             current.getSharedPreferences(PREFS, 0).edit().putBoolean(NSFW_ONLY, mode).apply();
             Toast.makeText(current, mode ? "NSFW mode on" : "NSFW mode off", Toast.LENGTH_SHORT).show();
-            current.recreate();
+            refreshFeed(screen);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             Toast.makeText(current, "Could not change NSFW settings", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private static void setMode(boolean enabled) {
+        mode = enabled;
+        modeState.setValue(enabled);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void refreshFeed(Object screen) {
+        Object current = null;
+        try {
+            current = screen.getClass().getMethod("getCurrentScreen").invoke(screen);
+            if (current == null) return;
+            if ("com.reddit.feedslegacy.switcher.impl.homepager.compose.HomePagerScreen"
+                .equals(current.getClass().getName()))
+                current = current.getClass().getMethod("O5").invoke(current);
+            if (current == null) return;
+            Object viewModel = current.getClass().getMethod("F1").invoke(current);
+            Class<?> type = Class.forName("com.reddit.feeds.ui.events.FeedRefreshType");
+            Class<?> interaction = Class.forName("com.reddit.feeds.ui.events.FeedRefreshInteractionMode");
+            Class<?> eventType = Class.forName("com.reddit.feeds.ui.events.OnFeedRefresh");
+            Object event = eventType.getConstructor(type, interaction).newInstance(
+                Enum.valueOf((Class<? extends Enum>) type, "PULL_TO_REFRESH"),
+                Enum.valueOf((Class<? extends Enum>) interaction, "MANUAL"));
+            viewModel.getClass().getMethod("a0", Class.forName("yn1.a")).invoke(viewModel, event);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            if (current != null) try {
+                current.getClass().getMethod("q5").invoke(current);
+            } catch (ReflectiveOperationException | RuntimeException alsoIgnored) { }
         }
     }
 

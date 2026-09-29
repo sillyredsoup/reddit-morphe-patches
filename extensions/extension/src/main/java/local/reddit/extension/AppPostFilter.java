@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Resources;
 import android.preference.PreferenceCategory;
-import android.preference.PreferenceFragment;
+import android.preference.Preference;
 import android.preference.PreferenceScreen;
 import android.preference.SwitchPreference;
 import java.lang.reflect.Field;
@@ -29,27 +29,28 @@ public final class AppPostFilter {
 
     @SuppressWarnings("deprecation")
     public static void addSetting(Object value) {
-        if (!(value instanceof PreferenceFragment)) return;
-        PreferenceFragment fragment = (PreferenceFragment) value;
-        Activity activity = fragment.getActivity();
-        PreferenceScreen screen = fragment.getPreferenceScreen();
-        if (activity == null || screen == null || screen.findPreference(HIDE) != null) return;
-        Context context = activity.getApplicationContext();
+        if (!(value instanceof PreferenceScreen)) return;
+        PreferenceScreen screen = (PreferenceScreen) value;
+        if (screen.findPreference(HIDE) != null) return;
+        Context screenContext = screen.getContext();
+        Context context = screenContext.getApplicationContext();
         enabled = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(HIDE, true);
-        PreferenceCategory category = new PreferenceCategory(activity);
+        PreferenceCategory category = new PreferenceCategory(screenContext);
         category.setTitle("Feed");
         screen.addPreference(category);
-        SwitchPreference setting = new SwitchPreference(activity);
+        SwitchPreference setting = new SwitchPreference(screenContext);
         setting.setKey(HIDE);
         setting.setTitle("Hide games in feed");
         setting.setSummary("Hide interactive Reddit app and game posts in newly loaded listings");
         setting.setPersistent(false);
         setting.setChecked(enabled);
-        setting.setOnPreferenceChangeListener((preference, next) -> {
-            enabled = (Boolean) next;
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putBoolean(HIDE, enabled).apply();
-            return true;
+        setting.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+            @Override public boolean onPreferenceChange(Preference preference, Object next) {
+                enabled = (Boolean) next;
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit().putBoolean(HIDE, enabled).apply();
+                return true;
+            }
         });
         category.addPreference(setting);
     }

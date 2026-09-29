@@ -5,12 +5,15 @@ import app.morphe.patcher.util.proxy.mutableTypes.MutableClass;
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod;
 import com.android.tools.smali.dexlib2.Opcode;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
 import com.android.tools.smali.dexlib2.builder.BuilderInstruction;
 import com.android.tools.smali.dexlib2.iface.instruction.*;
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference;
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
+import com.android.tools.smali.dexlib2.iface.reference.TypeReference;
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference;
+import com.android.tools.smali.dexlib2.immutable.reference.ImmutableTypeReference;
 import java.io.InputStream;
 import java.util.*;
 import kotlin.Unit;
@@ -27,7 +30,7 @@ public final class RedditModePatch {
     public static synchronized BytecodePatch getRedditModePatch() {
         if (patch != null) return patch;
         patch = PatchKt.bytecodePatch("Reddit - NSFW mode",
-            "Adds an NSFW-only bottom bar button with reversible visibility settings.",
+            "Uses the Inbox slot for an NSFW-only button with reversible visibility settings.",
             false, builder -> {
                 builder.compatibleWith(new Compatibility("com.reddit.frontpage", "Reddit", null,
                     ApkFileType.APKM, 0xFF4500, null,
@@ -76,6 +79,31 @@ public final class RedditModePatch {
                         builds++;
                     }
                     if (builds != 1) throw new IllegalStateException("Bottom bar builder shape changed: " + builds);
+
+                    MutableMethod modern = one(context.mutableClassDefBy(NAV), "K5", "Lgp3/c;", 1);
+                    int modernThis = modern.getImplementation().getRegisterCount() - 2;
+                    modern.getImplementation().addInstruction(0,
+                        call(EXT, "initializeModern", "V",
+                            Collections.singletonList("Ljava/lang/Object;"), modernThis));
+                    List<Instruction> modernCode = new ArrayList<>(modern.getImplementation().getInstructions());
+                    int models = 0;
+                    for (int i = modernCode.size() - 1; i >= 0; i--) {
+                        Instruction ins = modernCode.get(i);
+                        if (ins.getOpcode() != Opcode.CHECK_CAST || !(ins instanceof ReferenceInstruction)) continue;
+                        Object ref = ((ReferenceInstruction) ins).getReference();
+                        if (!(ref instanceof TypeReference) || !"Lmv1/a;".equals(((TypeReference) ref).getType())) continue;
+                        int model = ((OneRegisterInstruction) ins).getRegisterA();
+                        modern.getImplementation().addInstruction(i + 1,
+                            call(EXT, "replaceModernTab", "Ljava/lang/Object;",
+                                Collections.singletonList("Ljava/lang/Object;"), model));
+                        modern.getImplementation().addInstruction(i + 2,
+                            new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, model));
+                        modern.getImplementation().addInstruction(i + 3,
+                            new BuilderInstruction21c(Opcode.CHECK_CAST, model,
+                                new ImmutableTypeReference("Lmv1/a;")));
+                        models++;
+                    }
+                    if (models != 1) throw new IllegalStateException("Modern bottom bar model shape changed: " + models);
 
                     MutableMethod renderer = null;
                     for (MutableMethod method : context.mutableClassDefBy(

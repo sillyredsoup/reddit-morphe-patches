@@ -24,12 +24,19 @@ public final class RedditMode {
     private static volatile Object repository;
     private static volatile Activity activity;
     private static volatile Object navScreen;
+    private static volatile String inboxLabel;
+    private static volatile int nsfwLabelId;
     private static volatile boolean mode;
 
     private RedditMode() {}
 
     public static void initialize(Object screen, Resources resources) {
         navScreen = screen;
+        try {
+            int id = resources.getIdentifier("label_inbox", "string", "com.reddit.frontpage");
+            if (id != 0) inboxLabel = resources.getString(id);
+            nsfwLabelId = resources.getIdentifier("label_nsfw", "string", "com.reddit.frontpage");
+        } catch (RuntimeException ignored) { }
         try {
             Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
             if (current != null) {
@@ -40,16 +47,45 @@ public final class RedditMode {
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
+    public static void initializeModern(Object screen) {
+        try {
+            Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
+            initialize(screen, current == null ? null : current.getResources());
+        } catch (ReflectiveOperationException | RuntimeException ignored) { navScreen = screen; }
+    }
+
+    public static Object replaceModernTab(Object model) {
+        int label = nsfwLabelId;
+        if (model == null || label == 0) return model;
+        try {
+            Class<?> type = model.getClass();
+            Object tab = type.getField("a").get(model);
+            String name = ((Enum<?>) tab).name();
+            if (!"Inbox".equals(name) && !"UnifiedInbox".equals(name)) return model;
+            Object icon = type.getField("d").get(model);
+            Constructor<?> ctor = type.getConstructor(tab.getClass(), int.class, int.class, icon.getClass());
+            return ctor.newInstance(tab, label, label, icon);
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return model; }
+    }
+
     @SuppressWarnings("unchecked")
     public static void addButton(Object builder) {
         if (!(builder instanceof List<?>) || ((List<?>) builder).isEmpty()) return;
         try {
+            List<Object> items = (List<Object>) builder;
             // Home is the first tab in Reddit 2026.14.0 and is always present.
-            Object original = ((List<?>) builder).get(0);
+            Object original = items.get(0);
             Object content = original.getClass().getField("b").get(original);
             Constructor<?> ctor = original.getClass().getConstructor(String.class, content.getClass());
             Object button = ctor.newInstance("NSFW", content);
-            ((List<Object>) builder).add(button);
+            for (int i = 1; i < items.size(); i++) {
+                String label = (String) items.get(i).getClass().getField("a").get(items.get(i));
+                if (label.equals(inboxLabel) || (inboxLabel == null && "Inbox".equals(label))) {
+                    items.set(i, button);
+                    return;
+                }
+            }
+            items.add(Math.min(1, items.size()), button);
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 

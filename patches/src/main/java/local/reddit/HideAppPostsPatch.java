@@ -6,7 +6,10 @@ import com.android.tools.smali.dexlib2.Opcode;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction;
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction;
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction;
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction;
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
 import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference;
 import java.io.InputStream;
 import java.util.*;
@@ -82,17 +85,20 @@ public final class HideAppPostsPatch {
                             settings = method;
                         }
                     if (settings == null) throw new IllegalStateException("Missing Morphe settings initializer");
-                    int self = settings.getImplementation().getRegisterCount() - 1;
                     List<Instruction> settingsCode = new ArrayList<>(settings.getImplementation().getInstructions());
                     int settingHooks = 0;
-                    for (int i = settingsCode.size() - 1; i >= 0; i--)
-                        if (settingsCode.get(i).getOpcode() == Opcode.RETURN_VOID) {
-                            settings.getImplementation().addInstruction(i,
-                                new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, self, 1,
+                    for (int i = 0; i < settingsCode.size(); i++) {
+                        Instruction ins = settingsCode.get(i);
+                        if (!(ins instanceof ReferenceInstruction) || !(ins instanceof FiveRegisterInstruction)) continue;
+                        Object ref = ((ReferenceInstruction) ins).getReference();
+                        if (!(ref instanceof MethodReference) || !"setPreferenceScreen".equals(((MethodReference) ref).getName())) continue;
+                        int screen = ((FiveRegisterInstruction) ins).getRegisterD();
+                        settings.getImplementation().addInstruction(i + 1,
+                                new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, screen, 1,
                                     new ImmutableMethodReference("Llocal/reddit/extension/AppPostFilter;",
                                         "addSetting", Collections.singletonList("Ljava/lang/Object;"), "V")));
-                            settingHooks++;
-                        }
+                        settingHooks++;
+                    }
                     if (settingHooks != 1) throw new IllegalStateException("Morphe settings initializer changed");
                     return Unit.INSTANCE;
                 });

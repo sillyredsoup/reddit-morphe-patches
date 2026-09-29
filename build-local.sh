@@ -21,8 +21,8 @@ cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
 Description: Hide interactive posts and add NSFW mode
-Version: 0.1.2
-Timestamp: 1790687097000
+Version: 0.1.3
+Timestamp: 1790687568000
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

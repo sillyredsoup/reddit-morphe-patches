@@ -19,15 +19,17 @@ cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
 Description: Hide interactive posts and add NSFW mode
-Version: 0.1.0
-Timestamp: 1790690000000
-Source: local
-Author: Local
+Version: 0.1.1
+Timestamp: 1790686502000
+Source: https://github.com/sillyredsoup/reddit-morphe-patches
+Author: sillyredsoup
 Contact: na
-Website: na
+Website: https://github.com/sillyredsoup/reddit-morphe-patches
 License: GPLv3
 Patcher-Version: 1.14.0
 
 EOF
 jar cfm "$repo_dir/reddit-mode.mpp" "$build_dir/bundle/META-INF/MANIFEST.MF" -C "$build_dir/bundle" .
+mkdir -p "$repo_dir/bundles"
+cp "$repo_dir/reddit-mode.mpp" "$repo_dir/bundles/reddit-mode.mpp"
 printf 'Built %s\n' "$repo_dir/reddit-mode.mpp"

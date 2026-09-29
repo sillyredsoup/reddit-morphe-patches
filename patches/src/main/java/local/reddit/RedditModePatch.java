@@ -1,0 +1,175 @@
+package local.reddit;
+
+import app.morphe.patcher.patch.*;
+import app.morphe.patcher.util.proxy.mutableTypes.MutableClass;
+import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod;
+import com.android.tools.smali.dexlib2.Opcode;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x;
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
+import com.android.tools.smali.dexlib2.builder.BuilderInstruction;
+import com.android.tools.smali.dexlib2.iface.instruction.*;
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference;
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
+import com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference;
+import java.io.InputStream;
+import java.util.*;
+import kotlin.Unit;
+
+/** Reddit 2026.14.0 only. Keep fingerprints strict so a changed APK fails closed. */
+public final class RedditModePatch {
+    private static final String VERSION = "2026.14.0";
+    private static final String EXT = "Llocal/reddit/extension/RedditMode;";
+    private static final String NAV = "Lcom/reddit/launch/bottomnav/BottomNavScreen;";
+    private static final String ITEM = "Lcom/reddit/widget/bottomnav/h;";
+    private static BytecodePatch patch;
+    private RedditModePatch() {}
+
+    @SuppressWarnings({"unchecked", "deprecation"})
+    public static synchronized BytecodePatch getRedditModePatch() {
+        if (patch != null) return patch;
+        patch = PatchKt.bytecodePatch("Reddit - Hide apps and NSFW mode",
+            "Hides interactive posts and adds an NSFW-only bottom bar mode with reversible visibility settings.",
+            false, builder -> {
+                builder.compatibleWith(new Compatibility("com.reddit.frontpage", "Reddit", null,
+                    ApkFileType.APKM, 0xFF4500, null,
+                    Collections.singletonList(new AppTarget(VERSION, false, 28)), false));
+                builder.extendWith(RedditModePatch::extensionStream);
+                builder.execute(context -> {
+                    if (!"com.reddit.frontpage".equals(context.getPackageMetadata().getPackageName())
+                        || !VERSION.equals(context.getPackageMetadata().getVersionName()))
+                        throw new IllegalStateException("Requires Reddit " + VERSION);
+
+                    MutableMethod children = one(context.mutableClassDefBy(
+                        "Lcom/reddit/domain/model/listing/Listing;"), "getChildren", "Ljava/util/List;", 0);
+                    List<Instruction> code = new ArrayList<>(children.getImplementation().getInstructions());
+                    int hooked = 0;
+                    for (int i = code.size() - 1; i >= 0; i--) {
+                        Instruction ins = code.get(i);
+                        if (ins.getOpcode() != Opcode.RETURN_OBJECT) continue;
+                        int r = ((OneRegisterInstruction) ins).getRegisterA();
+                        children.getImplementation().addInstruction(i,
+                            call(EXT, "filterListing", "Ljava/util/List;",
+                                Collections.singletonList("Ljava/util/List;"), r));
+                        children.getImplementation().addInstruction(i + 1,
+                            new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, r));
+                        hooked++;
+                    }
+                    if (hooked != 1) throw new IllegalStateException("Listing.getChildren shape changed");
+
+                    MutableMethod itemInit = one(context.mutableClassDefBy(ITEM), "<init>", "V", 2);
+                    int itemThis = itemInit.getImplementation().getRegisterCount() - 3;
+                    beforeReturns(itemInit, call(EXT, "rememberItem", "V",
+                        Collections.singletonList("Ljava/lang/Object;"), itemThis));
+
+                    MutableMethod nav = one(context.mutableClassDefBy(NAV), "J5", "Lgp3/g;", 1);
+                    int resources = nav.getImplementation().getRegisterCount() - 1;
+                    nav.getImplementation().addInstruction(0,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, resources - 1, 2,
+                            new ImmutableMethodReference(EXT, "setGamesLabel",
+                                Arrays.asList("Ljava/lang/Object;", "Landroid/content/res/Resources;"), "V")));
+                    List<Instruction> navCode = new ArrayList<>(nav.getImplementation().getInstructions());
+                    int builds = 0;
+                    for (int i = navCode.size() - 1; i >= 0; i--) {
+                        Instruction ins = navCode.get(i);
+                        if (!(ins instanceof ReferenceInstruction) || !(ins instanceof FiveRegisterInstruction)) continue;
+                        Object ref = ((ReferenceInstruction) ins).getReference();
+                        if (!(ref instanceof MethodReference) || !"build".equals(((MethodReference) ref).getName())
+                            || !((MethodReference) ref).getDefiningClass().contains("ListBuilder")) continue;
+                        int list = ((FiveRegisterInstruction) ins).getRegisterC();
+                        nav.getImplementation().addInstruction(i,
+                            call(EXT, "addButton", "V",
+                                Collections.singletonList("Ljava/lang/Object;"), list));
+                        builds++;
+                    }
+                    if (builds != 1) throw new IllegalStateException("Bottom bar builder shape changed: " + builds);
+
+                    MutableMethod renderer = null;
+                    for (MutableMethod method : context.mutableClassDefBy(
+                        "Lcom/reddit/widget/bottomnav/f;").getMethods()) {
+                        if (!"b".equals(method.getName()) || !"V".equals(method.getReturnType())
+                            || method.getParameterTypes().size() != 13
+                            || !"Lcom/reddit/widget/bottomnav/g;".contentEquals(method.getParameterTypes().get(0))
+                            || !"Lkotlin/jvm/functions/Function0;".contentEquals(method.getParameterTypes().get(1)))
+                            continue;
+                        if (renderer != null) throw new IllegalStateException("Multiple bottom tab renderers");
+                        renderer = method;
+                    }
+                    if (renderer == null || renderer.getImplementation() == null)
+                        throw new IllegalStateException("Bottom tab renderer missing");
+                    int descriptor = renderer.getImplementation().getRegisterCount() - parameterWords(renderer);
+                    renderer.getImplementation().addInstruction(0,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, descriptor, 4,
+                            new ImmutableMethodReference(EXT, "selected",
+                                Arrays.asList("Ljava/lang/Object;", "Lkotlin/jvm/functions/Function0;",
+                                    "Ljava/lang/String;", "Z"), "Z")));
+                    renderer.getImplementation().addInstruction(1,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT, descriptor + 3));
+                    renderer.getImplementation().addInstruction(2,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, descriptor, 2,
+                            new ImmutableMethodReference(EXT, "wrapClick",
+                                Arrays.asList("Ljava/lang/Object;", "Lkotlin/jvm/functions/Function0;"),
+                                "Lkotlin/jvm/functions/Function0;")));
+                    renderer.getImplementation().addInstruction(3,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, descriptor + 1));
+
+                    MutableClass repository = context.mutableClassDefBy("Lcom/reddit/account/repository/c;");
+                    MutableMethod repositoryInit = null;
+                    for (MutableMethod method : repository.getMethods())
+                        if ("<init>".equals(method.getName()) && method.getImplementation() != null) {
+                            if (repositoryInit != null) throw new IllegalStateException("Multiple repository constructors");
+                            repositoryInit = method;
+                        }
+                    if (repositoryInit == null) throw new IllegalStateException("Preference repository constructor missing");
+                    int repoThis = repositoryInit.getImplementation().getRegisterCount()
+                        - parameterWords(repositoryInit) - 1;
+                    beforeReturns(repositoryInit, call(EXT, "rememberRepository", "V",
+                        Collections.singletonList("Ljava/lang/Object;"), repoThis));
+                    return Unit.INSTANCE;
+                });
+                return Unit.INSTANCE;
+            });
+        return patch;
+    }
+
+    private static int parameterWords(MutableMethod method) {
+        int result = 0;
+        for (CharSequence p : method.getParameterTypes()) result += ("J".contentEquals(p) || "D".contentEquals(p)) ? 2 : 1;
+        return result;
+    }
+
+    private static MutableMethod one(MutableClass owner, String name, String returns, int params) {
+        MutableMethod found = null;
+        for (MutableMethod method : owner.getMethods())
+            if (name.equals(method.getName()) && returns.equals(method.getReturnType())
+                && method.getParameterTypes().size() == params && method.getImplementation() != null) {
+                if (found != null) throw new IllegalStateException("Ambiguous " + owner.getType() + "->" + name);
+                found = method;
+            }
+        if (found == null) throw new IllegalStateException("Missing " + owner.getType() + "->" + name);
+        return found;
+    }
+
+    private static void beforeReturns(MutableMethod method, BuilderInstruction3rc call) {
+        List<Instruction> code = new ArrayList<>(method.getImplementation().getInstructions());
+        int count = 0;
+        for (int i = code.size() - 1; i >= 0; i--)
+            if (code.get(i).getOpcode() == Opcode.RETURN_VOID) {
+                method.getImplementation().addInstruction(i, call);
+                count++;
+            }
+        if (count == 0) throw new IllegalStateException("No return in " + method.getName());
+    }
+
+    private static BuilderInstruction3rc call(String owner, String name, String returns,
+                                               List<String> params, int register) {
+        return new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, register, 1,
+            new ImmutableMethodReference(owner, name, params, returns));
+    }
+
+    private static InputStream extensionStream() {
+        InputStream stream = RedditModePatch.class.getClassLoader()
+            .getResourceAsStream("extensions/reddit-mode.mpe");
+        if (stream == null) throw new IllegalStateException("Missing reddit-mode.mpe");
+        return stream;
+    }
+}

@@ -1,0 +1,7 @@
+{
+  "created_at": "2026-09-29T12:48:46Z",
+  "description": "First test release: hide interactive Reddit App posts and add an NSFW-only bottom bar mode for Reddit 2026.14.0.",
+  "download_url": "https://github.com/sillyredsoup/reddit-morphe-patches/releases/download/v0.1.0/reddit-mode.mpp",
+  "signature_download_url": "",
+  "version": "0.1.0"
+}

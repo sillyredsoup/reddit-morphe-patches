@@ -1,0 +1,24 @@
+name: Build patch bundle
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build
+        run: ./build-local.sh
+      - name: Verify Morphe discovers patch
+        run: java -jar .local-tools/morphe-desktop.jar list-patches --patches=reddit-mode.mpp --filter-package-name=com.reddit.frontpage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reddit-mode-mpp
+          path: reddit-mode.mpp

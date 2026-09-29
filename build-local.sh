@@ -30,8 +30,8 @@ cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
 Description: Independent app post filter and NSFW bottom bar mode
-Version: 0.2.5
-Timestamp: 1790694414000
+Version: 0.2.6
+Timestamp: 1790695489000
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

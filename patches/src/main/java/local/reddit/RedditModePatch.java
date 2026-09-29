@@ -5,12 +5,9 @@ import app.morphe.patcher.util.proxy.mutableTypes.MutableClass;
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod;
 import com.android.tools.smali.dexlib2.Opcode;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x;
-import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c;
-import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21t;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc;
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c;
-import com.android.tools.smali.dexlib2.builder.Label;
 import com.android.tools.smali.dexlib2.builder.BuilderInstruction;
 import com.android.tools.smali.dexlib2.iface.instruction.*;
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference;
@@ -89,9 +86,6 @@ public final class RedditModePatch {
                         converted++;
                     }
                     if (converted != 1) throw new IllegalStateException("Feed converter shape changed: " + converted);
-
-                    hookPostRenderer(context.mutableClassDefBy("Lcom/reddit/feeds/ui/composables/feed/m;"));
-                    hookPostRenderer(context.mutableClassDefBy("Lcom/reddit/feeds/impl/ui/composables/j;"));
 
                     MutableMethod nav = one(context.mutableClassDefBy(NAV), "J5", "Lgp3/g;", 1);
                     int resources = nav.getImplementation().getRegisterCount() - 1;
@@ -192,22 +186,6 @@ public final class RedditModePatch {
         int result = 0;
         for (CharSequence p : method.getParameterTypes()) result += ("J".contentEquals(p) || "D".contentEquals(p)) ? 2 : 1;
         return result;
-    }
-
-    private static void hookPostRenderer(MutableClass owner) {
-        MutableMethod render = one(owner, "b", "V", 3);
-        int self = render.getImplementation().getRegisterCount() - 4;
-        if (self < 1) throw new IllegalStateException("No free feed renderer register: " + owner.getType());
-        Label show = render.getImplementation().newLabelForIndex(0);
-        render.getImplementation().addInstruction(0,
-            call(EXT, "shouldHideRenderedPost", "Z",
-                Collections.singletonList("Ljava/lang/Object;"), self));
-        render.getImplementation().addInstruction(1,
-            new BuilderInstruction11x(Opcode.MOVE_RESULT, 0));
-        render.getImplementation().addInstruction(2,
-            new BuilderInstruction21t(Opcode.IF_EQZ, 0, show));
-        render.getImplementation().addInstruction(3,
-            new BuilderInstruction10x(Opcode.RETURN_VOID));
     }
 
     private static MutableMethod one(MutableClass owner, String name, String returns, int params) {

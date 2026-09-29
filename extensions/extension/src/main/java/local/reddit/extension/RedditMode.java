@@ -5,7 +5,6 @@ import android.content.res.Resources;
 import android.widget.Toast;
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
 import kotlin.coroutines.jvm.internal.ContinuationImpl;
@@ -24,7 +23,6 @@ public final class RedditMode {
     private static volatile boolean mode;
     private static final androidx.compose.runtime.o1 modeState =
         androidx.compose.runtime.j.B(Boolean.FALSE);
-    private static final Map<String, Boolean> postNsfw = new ConcurrentHashMap<>();
 
     private RedditMode() {}
 
@@ -131,23 +129,9 @@ public final class RedditMode {
         if (element == null) return converted;
         String type = element.getClass().getName();
         if (!"ym1.u1".equals(type) && !"ym1.z".equals(type)) return converted;
-        try {
-            String linkId = (String) element.getClass().getMethod("getLinkId").invoke(element);
-            boolean nsfw = hasNsfwIndicator(element, 0,
-                Collections.newSetFromMap(new IdentityHashMap<>()));
-            if (linkId != null) postNsfw.put(linkId, nsfw);
-            return nsfw == mode ? converted : null;
-        } catch (ReflectiveOperationException | RuntimeException ignored) { return converted; }
-    }
-
-    public static boolean shouldHideRenderedPost(Object section) {
-        boolean nsfwOnly = (Boolean) modeState.getValue();
-        if (section == null) return false;
-        try {
-            String id = (String) section.getClass().getField("a").get(section);
-            Boolean nsfw = postNsfw.get(id);
-            return nsfw == null ? nsfwOnly : nsfw != nsfwOnly;
-        } catch (ReflectiveOperationException | RuntimeException ignored) { return false; }
+        boolean nsfw = hasNsfwIndicator(element, 0,
+            Collections.newSetFromMap(new IdentityHashMap<>()));
+        return nsfw == mode ? converted : null;
     }
 
     public static void toggle(Object screen) {

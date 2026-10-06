@@ -241,3 +241,8 @@ Home, as did the underlying native feed. A runtime map inspection confirmed
 separate entries: original Home retained section 9 and its original post ID;
 profile retained its own selected post, and the second Home had a different
 position and post. No shared position was found.
+
+Returning from the profile Activity to the original Home viewer preserved its
+selected post. Closing that viewer and reopening Vertical from the original Home
+feed also opened the same post, confirming isolation in the full native back
+stack transition.

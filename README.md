@@ -34,4 +34,7 @@ profile → broken toggle reproduction on their phone.
 
 Version 0.3.9 has build and local regression checks only. Emulator testing and
 post-release download checks were skipped at the user's request; the new tab and
-icon still need phone testing.
+icon were subsequently checked in v0.3.10 after the user resumed testing.
+Version 0.3.10 fixes the icon renderer lookup and was visually verified in the
+emulator: NSFW is outlined when off and filled when on, with Inbox preserved and
+the Vertical video icon also rendered correctly.

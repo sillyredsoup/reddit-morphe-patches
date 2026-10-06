@@ -106,7 +106,7 @@ public final class VerticalHomeFeed {
                     Method draw = drawIcon;
                     if (draw == null) {
                         Class<?> icon = Class.forName("com.reddit.ui.compose.icons.h");
-                        draw = Class.forName("com.reddit.ui.compose.pointer.q9").getMethod("a",
+                        draw = Class.forName("com.reddit.ui.compose.ds.q9").getMethod("a",
                             icon, Class.forName("androidx.compose.ui.s"), long.class,
                             boolean.class, String.class,
                             Class.forName("androidx.compose.runtime.m"), int.class, int.class);

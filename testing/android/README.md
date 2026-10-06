@@ -190,3 +190,17 @@ the matching Compose assets are i0.S0 and h0.S0 for outline/filled states. The
 preference XML and icon registry were inspected directly in Reddit 2026.14.0.
 Settings acknowledgements, queued requests, filtering and refresh behavior remain.
 Pending/success messages are retained only in logs; normal operation has no toast.
+
+## Correct icon renderer (v0.3.10)
+
+The user revoked the no-testing preference; emulator and release verification
+are enabled again. Raw DEX inspection showed com.reddit.ui.compose.ds.q9 with
+the expected icon renderer signature. The decompiler's pointer.q9 package is an
+alias, not a runtime class. Both custom buttons now use the raw DEX class name.
+
+Final APK applied all 21 patches with zero failures. Ten local checks passed.
+Authenticated emulator captures show Home / Vertical / NSFW / Inbox / You, with
+NSFW's 18 diamond outlined when off and filled when on. Vertical's video icon
+renders correctly too. Both mode transitions received settings acknowledgements;
+no icon-render warnings or crashes were recorded. Mode restored to off. Private
+captures bar-off.png and bar-on.png contain only the navigation bar.

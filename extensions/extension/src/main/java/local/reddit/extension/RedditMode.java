@@ -122,7 +122,8 @@ public final class RedditMode {
                 try {
                     Method draw = drawIcon;
                     if (draw == null) {
-                        draw = Class.forName("com.reddit.ui.compose.pointer.q9").getMethod("a",
+                        // Use the DEX class name; the decompiler aliases ds to pointer.
+                        draw = Class.forName("com.reddit.ui.compose.ds.q9").getMethod("a",
                             Class.forName("com.reddit.ui.compose.icons.h"), Class.forName("androidx.compose.ui.s"),
                             long.class, boolean.class, String.class,
                             Class.forName("androidx.compose.runtime.m"), int.class, int.class);
@@ -134,6 +135,9 @@ public final class RedditMode {
                         .getField("S0").get(null);
                     draw.invoke(null, icon, null, 0L, false, "NSFW", composer, 24576, 14);
                 } catch (ReflectiveOperationException | RuntimeException error) {
+                    Throwable cause = error instanceof InvocationTargetException && error.getCause() != null
+                        ? error.getCause() : error;
+                    Log.w("RedditMode", "NSFW icon render failed: " + cause.getClass().getSimpleName());
                     ((Function2<Object, Object, ?>) original).invoke(composer, flags);
                 }
                 return kotlinUnit();

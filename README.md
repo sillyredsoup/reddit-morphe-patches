@@ -3,7 +3,7 @@
 These three independent patches target Reddit 2026.14.0:
 
 - **Reddit - Hide app posts** hides Reddit Dev Platform games and apps in listings. It adds a **Hide games in feed** switch under Reddit's Morphe settings → Feed. The switch defaults to on and applies to newly loaded listings. This patch requires the upstream Morphe settings patch for the switch.
-- **Reddit - NSFW mode** uses the Inbox slot for an NSFW button in the bottom bar. It keeps the Inbox icon; the Home and Games buttons stay in place. Turning it on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and shows only non-NSFW posts. Each tap reverses the displayed mode and shows an **updating account settings** toast. After Reddit acknowledges both settings, an **account settings confirmed** toast appears and the current feed refreshes without restarting the screen. Further taps while an update is pending queue the latest requested mode. Rejected or timed-out updates show a failure message instead of a confirmation.
+- **Reddit - NSFW mode** adds its own **NSFW** button to the bottom bar, after Vertical if present or otherwise after Home. It uses Reddit's blur-content icon, with a filled icon and active highlight when enabled. Inbox keeps its normal function. Turning the mode on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and shows only non-NSFW posts. The current feed refreshes after Reddit acknowledges both settings, without restarting the screen. Further taps while an update is pending queue the latest requested mode. Normal operation is silent; only unavailable settings, failed updates, or timeouts show a toast.
 - **Reddit - Vertical home feed** adds a **Vertical** button with a video icon to the bottom bar. From Home, it opens Reddit's full screen media player at the first visible post (or the next image/video), in Home's order. Near the end it requests another page from Home's own pager and appends its images and videos. Repeated posts are skipped by post ID. Titles, usernames, and controls start hidden; tap the media to show or hide them. Normal post taps retain Reddit's behavior. This patch is experimental until tested in the app.
 
 Add the GitHub source in Morphe Manager:
@@ -31,3 +31,7 @@ navigation screen is created, toggling while account state lags, and pending,
 confirmed, rejected, queued and timed-out account updates. These focused JVM
 checks use Android/Compose fixtures. The user confirmed that v0.3.7 fixes the
 profile → broken toggle reproduction on their phone.
+
+Version 0.3.9 has build and local regression checks only. Emulator testing and
+post-release download checks were skipped at the user's request; the new tab and
+icon still need phone testing.

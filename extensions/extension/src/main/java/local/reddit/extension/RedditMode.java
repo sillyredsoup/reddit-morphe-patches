@@ -14,6 +14,7 @@ import kotlin.coroutines.EmptyCoroutineContext;
 import kotlin.coroutines.jvm.internal.ContinuationImpl;
 import kotlin.coroutines.jvm.internal.SuspendLambda;
 import kotlin.jvm.functions.Function0;
+import kotlin.jvm.functions.Function2;
 import wl3.a;
 
 /** Runtime hooks for Reddit 2026.14.0. */
@@ -22,8 +23,8 @@ public final class RedditMode {
     private static final String NSFW_ONLY = "nsfw_filter_active";
     private static volatile Object repository;
     private static volatile WeakReference<Object> navScreen = new WeakReference<>(null);
-    private static volatile String inboxLabel;
-    private static volatile int nsfwLabelId;
+    private static volatile Method drawIcon;
+    private static volatile Method drawLabel;
     private static volatile boolean mode;
     private static final Handler main = new Handler(Looper.getMainLooper());
     private static SettingUpdate activeUpdate;
@@ -36,11 +37,6 @@ public final class RedditMode {
     public static void initialize(Object screen, Resources resources) {
         navScreen = new WeakReference<>(screen);
         try {
-            int id = resources.getIdentifier("label_inbox", "string", "com.reddit.frontpage");
-            if (id != 0) inboxLabel = resources.getString(id);
-            nsfwLabelId = resources.getIdentifier("label_nsfw", "string", "com.reddit.frontpage");
-        } catch (RuntimeException ignored) { }
-        try {
             Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
             if (current != null)
                 setMode(current.getSharedPreferences(PREFS, 0).getBoolean(NSFW_ONLY, false));
@@ -48,26 +44,7 @@ public final class RedditMode {
     }
 
     public static void initializeModern(Object screen) {
-        try {
-            Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
-            initialize(screen, current == null ? null : current.getResources());
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            navScreen = new WeakReference<>(screen);
-        }
-    }
-
-    public static Object replaceModernTab(Object model) {
-        int label = nsfwLabelId;
-        if (model == null || label == 0) return model;
-        try {
-            Class<?> type = model.getClass();
-            Object tab = type.getField("a").get(model);
-            String name = ((Enum<?>) tab).name();
-            if (!"Inbox".equals(name) && !"UnifiedInbox".equals(name)) return model;
-            Object icon = type.getField("d").get(model);
-            Constructor<?> ctor = type.getConstructor(tab.getClass(), int.class, int.class, icon.getClass());
-            return ctor.newInstance(tab, label, label, icon);
-        } catch (ReflectiveOperationException | RuntimeException ignored) { return model; }
+        initialize(screen, null);
     }
 
     @SuppressWarnings("unchecked")
@@ -80,14 +57,13 @@ public final class RedditMode {
             Object content = original.getClass().getField("b").get(original);
             Constructor<?> ctor = original.getClass().getConstructor(String.class, content.getClass());
             Object button = ctor.newInstance("NSFW", content);
-            for (int i = 1; i < items.size(); i++) {
+            int position = 1;
+            for (int i = 0; i < items.size(); i++) {
                 String label = (String) items.get(i).getClass().getField("a").get(items.get(i));
-                if (label.equals(inboxLabel) || (inboxLabel == null && "Inbox".equals(label))) {
-                    items.set(i, button);
-                    return;
-                }
+                if ("NSFW".equals(label)) return;
+                if ("Vertical".equals(label)) position = i + 1;
             }
-            items.add(Math.min(1, items.size()), button);
+            items.add(position, button);
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
@@ -131,6 +107,66 @@ public final class RedditMode {
             } catch (ReflectiveOperationException | RuntimeException ignored) { }
         }
         return null;
+    }
+
+    public static String tabLabel(Object descriptor, String original) {
+        try { return "NSFW".equals(descriptor.getClass().getField("a").get(descriptor)) ? "NSFW" : original; }
+        catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Function2<?, ?, ?> tabIcon(Object descriptor, Function2<?, ?, ?> original) {
+        try {
+            if (!"NSFW".equals(descriptor.getClass().getField("a").get(descriptor))) return original;
+            return (composer, flags) -> {
+                try {
+                    Method draw = drawIcon;
+                    if (draw == null) {
+                        draw = Class.forName("com.reddit.ui.compose.pointer.q9").getMethod("a",
+                            Class.forName("com.reddit.ui.compose.icons.h"), Class.forName("androidx.compose.ui.s"),
+                            long.class, boolean.class, String.class,
+                            Class.forName("androidx.compose.runtime.m"), int.class, int.class);
+                        drawIcon = draw;
+                    }
+                    boolean active = (Boolean) modeState.getValue();
+                    // icon_nsfw is the icon used by Reddit's blur-content setting.
+                    Object icon = Class.forName("com.reddit.ui.compose.icons." + (active ? "h0" : "i0"))
+                        .getField("S0").get(null);
+                    draw.invoke(null, icon, null, 0L, false, "NSFW", composer, 24576, 14);
+                } catch (ReflectiveOperationException | RuntimeException error) {
+                    ((Function2<Object, Object, ?>) original).invoke(composer, flags);
+                }
+                return kotlinUnit();
+            };
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Function2<?, ?, ?> tabText(Object descriptor, Function2<?, ?, ?> original) {
+        try {
+            if (!"NSFW".equals(descriptor.getClass().getField("a").get(descriptor))) return original;
+            return (composer, flags) -> {
+                try {
+                    Method draw = drawLabel;
+                    if (draw == null) {
+                        for (Method candidate : Class.forName("com.reddit.ui.compose.ds.kh").getMethods()) {
+                            if ("b".equals(candidate.getName()) && candidate.getParameterCount() == 21
+                                && candidate.getParameterTypes()[0] == String.class) {
+                                draw = candidate;
+                                drawLabel = draw;
+                                break;
+                            }
+                        }
+                    }
+                    if (draw == null) throw new NoSuchMethodException("bottom bar text");
+                    draw.invoke(null, "NSFW", null, 0L, 0L, null, null, null, 0L,
+                        null, 0, 0L, 0, false, 0, 0, null, null, composer, 0, 0, 262142);
+                } catch (ReflectiveOperationException | RuntimeException error) {
+                    ((Function2<Object, Object, ?>) original).invoke(composer, flags);
+                }
+                return kotlinUnit();
+            };
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return original; }
     }
 
     public static boolean selected(Object descriptor, Function0<?> click, String label,
@@ -190,7 +226,6 @@ public final class RedditMode {
             setMode(next);
             current.getSharedPreferences(PREFS, 0).edit().putBoolean(NSFW_ONLY, mode).apply();
             Log.i("RedditMode", stateText(next) + " — updating account settings");
-            Toast.makeText(current, stateText(next) + " — updating account settings", Toast.LENGTH_SHORT).show();
             SettingUpdate update = new SettingUpdate(repo, screen, next);
             if (activeUpdate == null) update.start();
             else queuedUpdate = update;
@@ -319,7 +354,8 @@ public final class RedditMode {
                 Activity activity = (Activity) owner.getClass().getMethod("H3").invoke(owner);
                 if (activity == null) return;
                 Log.i("RedditMode", stateText(target) + " — " + message);
-                Toast.makeText(activity, stateText(target) + " — " + message, Toast.LENGTH_SHORT).show();
+                if (!confirmed)
+                    Toast.makeText(activity, stateText(target) + " — " + message, Toast.LENGTH_SHORT).show();
                 if (confirmed) refreshFeed(owner);
             } catch (ReflectiveOperationException | RuntimeException ignored) { }
             if (!confirmed) Log.w("RedditMode", "NSFW " + message);

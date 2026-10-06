@@ -176,3 +176,17 @@ emulator run observed real F() acknowledgements for both settings when turning
 mode on and off, with no crashes. Screenshots/OCR captured the pending and
 confirmed messages; diagnostics are private under .android-testing. The final
 release extension fingerprint matches the extension used for that APK.
+
+## Silent NSFW button (v0.3.9)
+
+Per user instruction, emulator runs and post-release download checks are skipped
+for this iteration. Local checks cover preserving Inbox, adding NSFW when Inbox
+is absent, duplicate tab prevention, normal silence, and retained error toasts.
+
+The NSFW tab is now added to both native bottom-bar builders, alongside Inbox.
+Its title/click label and icon are drawn explicitly rather than borrowing Home's
+appearance. The blur-content preference uses drawable/icon_nsfw (0x7f08043f);
+the matching Compose assets are i0.S0 and h0.S0 for outline/filled states. The
+preference XML and icon registry were inspected directly in Reddit 2026.14.0.
+Settings acknowledgements, queued requests, filtering and refresh behavior remain.
+Pending/success messages are retained only in logs; normal operation has no toast.

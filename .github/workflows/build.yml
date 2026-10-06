@@ -16,6 +16,8 @@ jobs:
           java-version: '21'
       - name: Build
         run: ./build-local.sh
+      - name: Verify NSFW click lifecycle and delayed account state
+        run: python3 testing/nsfw-regression.py
       - name: Verify Android patch classes
         run: |
           unzip -p reddit-mode.mpp classes.dex > /tmp/reddit-patches.dex

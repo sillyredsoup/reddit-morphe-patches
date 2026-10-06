@@ -2,7 +2,9 @@ package local.reddit.extension;
 
 import android.app.Activity;
 import android.content.res.Resources;
+import android.util.Log;
 import android.widget.Toast;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.*;
 import java.util.*;
 import kotlin.coroutines.CoroutineContext;
@@ -17,7 +19,7 @@ public final class RedditMode {
     private static final String PREFS = "local.reddit.mode";
     private static final String NSFW_ONLY = "nsfw_filter_active";
     private static volatile Object repository;
-    private static volatile Object navScreen;
+    private static volatile WeakReference<Object> navScreen = new WeakReference<>(null);
     private static volatile String inboxLabel;
     private static volatile int nsfwLabelId;
     private static volatile boolean mode;
@@ -27,7 +29,7 @@ public final class RedditMode {
     private RedditMode() {}
 
     public static void initialize(Object screen, Resources resources) {
-        navScreen = screen;
+        navScreen = new WeakReference<>(screen);
         try {
             int id = resources.getIdentifier("label_inbox", "string", "com.reddit.frontpage");
             if (id != 0) inboxLabel = resources.getString(id);
@@ -44,7 +46,9 @@ public final class RedditMode {
         try {
             Activity current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
             initialize(screen, current == null ? null : current.getResources());
-        } catch (ReflectiveOperationException | RuntimeException ignored) { navScreen = screen; }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            navScreen = new WeakReference<>(screen);
+        }
     }
 
     public static Object replaceModernTab(Object model) {
@@ -89,13 +93,32 @@ public final class RedditMode {
     public static Function0<?> wrapClick(Object descriptor, Function0<?> original) {
         try {
             String label = (String) descriptor.getClass().getField("a").get(descriptor);
-            if ("NSFW".equals(label)) return () -> {
-                Object screen = navScreen;
-                if (screen != null) toggle(screen);
-                return kotlinUnit();
-            };
+            if ("NSFW".equals(label)) {
+                // Both Reddit bottom-bar implementations capture their owning screen
+                // in the original callback. A later bar can replace the global fallback.
+                Object owner = clickScreen(original);
+                return () -> {
+                    Object screen = owner != null ? owner : navScreen.get();
+                    if (screen != null) toggle(screen);
+                    else Log.w("RedditMode", "NSFW click has no navigation screen");
+                    return kotlinUnit();
+                };
+            }
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         return original;
+    }
+
+    private static Object clickScreen(Function0<?> click) {
+        if (click == null) return null;
+        for (Field field : click.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers()) || !
+                "com.reddit.launch.bottomnav.BottomNavScreen".equals(field.getType().getName())) continue;
+            try {
+                field.setAccessible(true);
+                return field.get(click);
+            } catch (ReflectiveOperationException | RuntimeException ignored) { }
+        }
+        return null;
     }
 
     public static boolean selected(Object descriptor, Function0<?> click, String label,
@@ -139,27 +162,27 @@ public final class RedditMode {
         try {
             current = (Activity) screen.getClass().getMethod("H3").invoke(screen);
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
-        if (current == null) return;
+        if (current == null) {
+            Log.w("RedditMode", "NSFW click has no attached activity");
+            return;
+        }
         Object repo = repository;
         if (repo == null) {
             Toast.makeText(current, "NSFW settings are not ready", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
-            boolean show = getter(repo, "i");
-            if (!show) {
-                set(repo, "y", true);
-                set(repo, "q", false);
-                setMode(true);
-            } else {
-                set(repo, "y", false);
-                set(repo, "q", true);
-                setMode(false);
-            }
+            // Reddit's over18 setter dispatches its local update asynchronously.
+            // Toggle the mode shown by this button even if that getter still lags.
+            boolean next = !mode;
+            set(repo, "y", next);
+            set(repo, "q", !next);
+            setMode(next);
             current.getSharedPreferences(PREFS, 0).edit().putBoolean(NSFW_ONLY, mode).apply();
             Toast.makeText(current, mode ? "NSFW mode on" : "NSFW mode off", Toast.LENGTH_SHORT).show();
             refreshFeed(screen);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            Log.w("RedditMode", "NSFW settings update failed: " + error.getClass().getSimpleName());
             Toast.makeText(current, "Could not change NSFW settings", Toast.LENGTH_LONG).show();
         }
     }
@@ -192,10 +215,6 @@ public final class RedditMode {
                 current.getClass().getMethod("q5").invoke(current);
             } catch (ReflectiveOperationException | RuntimeException alsoIgnored) { }
         }
-    }
-
-    private static boolean getter(Object repo, String name) throws ReflectiveOperationException {
-        return (Boolean) repo.getClass().getMethod(name).invoke(repo);
     }
 
     private static boolean flag(Object value, String name) {

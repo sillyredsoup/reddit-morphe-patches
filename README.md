@@ -3,7 +3,7 @@
 These three independent patches target Reddit 2026.14.0:
 
 - **Reddit - Hide app posts** hides Reddit Dev Platform games and apps in listings. It adds a **Hide games in feed** switch under Reddit's Morphe settings → Feed. The switch defaults to on and applies to newly loaded listings. This patch requires the upstream Morphe settings patch for the switch.
-- **Reddit - NSFW mode** uses the Inbox slot for an NSFW button in the bottom bar. It keeps the Inbox icon; the Home and Games buttons stay in place. Turning it on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and shows only non-NSFW posts. Toggling updates visible posts and refreshes the current feed without restarting the screen.
+- **Reddit - NSFW mode** uses the Inbox slot for an NSFW button in the bottom bar. It keeps the Inbox icon; the Home and Games buttons stay in place. Turning it on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and shows only non-NSFW posts. Each tap reverses the displayed mode even while Reddit's account update is in flight. Toggling updates visible posts and refreshes the current feed without restarting the screen.
 - **Reddit - Vertical home feed** adds a **Vertical** button with a video icon to the bottom bar. From Home, it opens Reddit's full screen media player at the first visible post (or the next image/video), in Home's order. Near the end it requests another page from Home's own pager and appends its images and videos. Repeated posts are skipped by post ID. Titles, usernames, and controls start hidden; tap the media to show or hide them. Normal post taps retain Reddit's behavior. This patch is experimental until tested in the app.
 
 Add the GitHub source in Morphe Manager:
@@ -20,4 +20,13 @@ Run `./build-local.sh` to build `reddit-mode.mpp` with public build tools. The b
 
 ## Verification
 
-Morphe Desktop discovers all three patches and applies them together with the upstream **Hide ads** and **Hide navigation buttons** patches to the 2026.14.0 APKM. The vertical viewer still needs device testing.
+Morphe Desktop discovers all three patches and applies them together with all 18
+default upstream Reddit patches from Morphe v1.46.0 to the 2026.14.0 APKM.
+The authenticated Android emulator can load Home, open the vertical media viewer,
+advance by swiping up, and toggle NSFW filtering both ways without a recorded crash.
+See [Android testing](testing/android/README.md) for the persistent local setup.
+
+Run `python3 testing/nsfw-regression.py` to check button ownership after another
+navigation screen is created, and toggling while account state lags. These focused
+JVM checks use Android/Compose fixtures; they do not establish that the intermittent
+long-session issue is fixed.

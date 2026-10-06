@@ -1,5 +1,5 @@
 {
-  "version": "0.2.6",
+  "version": "0.3.7",
   "patches": [
     {
       "name": "Reddit - Hide app posts",
@@ -31,6 +31,33 @@
     {
       "name": "Reddit - NSFW mode",
       "description": "Shows only NSFW posts when on and only non-NSFW posts when off.",
+      "default": false,
+      "category": null,
+      "dependencies": [],
+      "compatiblePackages": [
+        {
+          "packageName": "com.reddit.frontpage",
+          "name": "Reddit",
+          "description": null,
+          "apkFileType": "APKM",
+          "appIconColor": "#FF4500",
+          "signatures": [],
+          "targets": [
+            {
+              "version": "2026.14.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 28,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "Reddit - Vertical home feed",
+      "description": "Adds a bottom bar button for a vertical Home feed viewer.",
       "default": false,
       "category": null,
       "dependencies": [],

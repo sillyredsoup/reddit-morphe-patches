@@ -1,5 +1,5 @@
 {
-  "version": "0.3.10",
+  "version": "0.4.0",
   "patches": [
     {
       "name": "Reddit - Hide app posts",
@@ -57,7 +57,7 @@
     },
     {
       "name": "Reddit - Vertical home feed",
-      "description": "Adds a bottom bar button for a vertical Home feed viewer.",
+      "description": "Adds a vertical media viewer for post feeds, with community navigation and synchronized scrolling.",
       "default": false,
       "category": null,
       "dependencies": [],

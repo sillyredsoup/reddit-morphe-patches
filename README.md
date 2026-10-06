@@ -4,7 +4,7 @@ These three independent patches target Reddit 2026.14.0:
 
 - **Reddit - Hide app posts** hides Reddit Dev Platform games and apps in listings. It adds a **Hide games in feed** switch under Reddit's Morphe settings → Feed. The switch defaults to on and applies to newly loaded listings. This patch requires the upstream Morphe settings patch for the switch.
 - **Reddit - NSFW mode** adds its own **NSFW** button to the bottom bar, after Vertical if present or otherwise after Home. It uses Reddit's blur-content icon, with a filled icon and active highlight when enabled. Inbox keeps its normal function. Turning the mode on enables Show NSFW, turns blur off, and shows only NSFW posts in the feed. Turning it off disables Show NSFW, turns blur back on, and shows only non-NSFW posts. The current feed refreshes after Reddit acknowledges both settings, without restarting the screen. Further taps while an update is pending queue the latest requested mode. Normal operation is silent; only unavailable settings, failed updates, or timeouts show a toast.
-- **Reddit - Vertical home feed** adds a **Vertical** button with a video icon to the bottom bar. From Home, it opens Reddit's full screen media player at the first visible post (or the next image/video), in Home's order. Near the end it requests another page from Home's own pager and appends its images and videos. Repeated posts are skipped by post ID. Titles, usernames, and controls start hidden; tap the media to show or hide them. Normal post taps retain Reddit's behavior. This patch is experimental until tested in the app.
+- **Reddit - Vertical home feed** adds a **Vertical** button with a video icon to the bottom bar. It opens the current post feed (Home, subreddit, profile Posts, Popular, and other native post feeds) at the first visible image/video or the next one. Swiping up follows that feed's order; near the end it requests another page from that same feed and skips repeated post IDs. Titles, usernames, subreddit, and controls start hidden; tap the media to show or hide them. Tap the subreddit in the overlay to open its community. The underlying feed follows the current media post, so Back returns to the same position. Normal post taps retain Reddit's behavior. The patch keeps its original name so existing selections continue to work.
 
 Add the GitHub source in Morphe Manager:
 
@@ -38,3 +38,13 @@ icon were subsequently checked in v0.3.10 after the user resumed testing.
 Version 0.3.10 fixes the icon renderer lookup and was visually verified in the
 emulator: NSFW is outlined when off and filled when on, with Inbox preserved and
 the Vertical video icon also rendered correctly.
+
+Run `python3 testing/vertical-regression.py` to check source-feed ownership, media
+ordering, duplicate post IDs, scroll events, and pagination cancellation when a
+viewer closes. These JVM checks supplement the Android emulator checks.
+
+Version 0.4.0 extends the viewer to native post feeds. Emulator checks cover Home,
+subreddit, profile Posts and Popular: three upward swipes, hidden initial controls,
+subreddit overlay, returning to the selected post, and reopening at that position.
+Pagination uses the source feed, with its cache viewport updated while the viewer
+is open. Snapshot and request ownership are isolated per viewer session.

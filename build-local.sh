@@ -30,9 +30,9 @@ cp "$build_dir/VerticalHomeFeed/dex/classes.dex" "$build_dir/bundle/extensions/v
 cat > "$build_dir/bundle/META-INF/MANIFEST.MF" <<'EOF'
 Manifest-Version: 1.0
 Name: Local Reddit Patches
-Description: Independent app post filter, NSFW mode, and vertical home feed
-Version: 0.3.10
-Timestamp: 1791295088145
+Description: Independent app post filter, NSFW mode, and vertical feeds
+Version: 0.4.0
+Timestamp: 1791296915640
 Source: https://github.com/sillyredsoup/reddit-morphe-patches
 Author: sillyredsoup
 Contact: na

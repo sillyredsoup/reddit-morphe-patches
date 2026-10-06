@@ -83,7 +83,7 @@ public class TestVertical {
  public static class Section {String key;Section(String key){this.key=key;}public String a(){return key;} }
  public static class FeedState {public List<Section> b=new ArrayList<>();public Object c=new Object();}
  public static class Pager { public FeedState state=new FeedState();int loads,lastVisible=-1;public void h(int index){lastVisible=index;}public Flow getState(){return new Flow(state);}public void a(){loads++;} }
- public static class Screen {public Activity activity;Screen(Activity activity){this.activity=activity;}public Activity H3(){return activity;}}
+ public static class Screen {public Activity activity;public Object parent;Screen(Activity activity){this.activity=activity;}public Activity H3(){return activity;}public Object X4(){return parent;}}
  public static class Model {public Screen U; public Pager x=new Pager();public Flow n0=new Flow("ON_SCREEN");int scrolls;String key;Model(Activity a){U=new Screen(a);}public void a0(yn1.a event){scrolls++;key=((com.reddit.feeds.ui.events.OnScrollToId)event).a;} }
  public static class Rendered {public List<Section> a;Rendered(List<Section> a){this.a=a;} }
  public static class ScrollOwner {public Object a;ScrollOwner(Object a){this.a=a;} }
@@ -98,11 +98,12 @@ public class TestVertical {
  public static class InputParams implements android.os.Parcelable {public Data data;InputParams(String token){data=new Data(token);}public Object h(){return data;} }
  public static void main(String[] args)throws Exception {
   Activity activity=new Activity(),otherActivity=new Activity(); Model home=new Model(activity),profile=new Model(activity),foreign=new Model(otherActivity);
-  VerticalHomeFeed.rememberFeed(home);VerticalHomeFeed.rememberFeed(profile);VerticalHomeFeed.rememberFeed(foreign);home.n0.value="OFF_SCREEN";
-  check(call("visibleFeed",new Class[]{Activity.class,Object.class},activity,new Object())==profile,"visible profile owns its own pager");
+  Object profileRoot=new Object();profile.U.parent=profileRoot;
+  VerticalHomeFeed.rememberFeed(home);VerticalHomeFeed.rememberFeed(profile);VerticalHomeFeed.rememberFeed(foreign);
+  check(call("visibleFeed",new Class[]{Activity.class,Object.class},activity,profileRoot)==profile,"profile owns its pager even while Home visibility is stale");
   check(call("visibleFeed",new Class[]{Activity.class,Object.class},activity,new Home(new Direct(home)))==home,"Home resolves selected child");
   profile.n0.value="OFF_SCREEN";
-  check(call("visibleFeed",new Class[]{Activity.class,Object.class},activity,new Object())==null,"foreign activity and hidden feed cannot be selected");
+  check(call("visibleFeed",new Class[]{Activity.class,Object.class},activity,profileRoot)==null,"foreign activity and hidden feed cannot be selected");
   List<Link> links=new ArrayList<>();for(String id:new String[]{"t3_a","t3_b","t3_c"})links.add(new Link(id));
   Link text=new Link("t3_text");text.supported=false;Link ad=new Link("t3_ad");ad.promoted=true;
   List<Link> all=Arrays.asList(links.get(0),text,links.get(1),ad,new Link("t3_a"),links.get(2));
@@ -117,6 +118,12 @@ public class TestVertical {
   check(call("focusedPost",new Class[]{Object.class,List.class},profile.x,posts)==links.get(2),"sticky header cannot replace selected visible media with previous row");
   VerticalHomeFeed.rememberPosition(new ScrollOwner(profile.x),new ScrollEvent(0,0));
   check(((Link)call("focusedPost",new Class[]{Object.class,List.class},profile.x,posts)).kindWithId.equals("t3_a"),"scrolling selected media out of view changes focus");
+  // The same post may also appear in Home. Its remembered position cannot seed a new profile.
+  for(Link link:links)home.x.state.b.add(new Section("feed_post_section_"+link.kindWithId));
+  VerticalHomeFeed.rememberRendered(home,new Rendered(home.x.state.b));
+  VerticalHomeFeed.rememberPosition(new ScrollOwner(home.x),new ScrollEvent(2));
+  Model freshProfile=new Model(activity);freshProfile.x.state.b.addAll(home.x.state.b);
+  check(((Link)call("focusedPost",new Class[]{Object.class,List.class},freshProfile.x,posts)).kindWithId.equals("t3_a"),"uninitialized profile focus cannot inherit Home position even for shared posts");
   List fresh=(List)call("unseenPosts",new Class[]{List.class,List.class},Arrays.asList(new Link("t3_a"),new Link("t3_c"),new Link("t3_d")),links);
   check(fresh.size()==1&&((Link)fresh.get(0)).kindWithId.equals("t3_d"),"updated old posts cannot loop during pagination");
   Object hs=session(home,List.of(new Link("t3_home"))),ps=session(profile,links);

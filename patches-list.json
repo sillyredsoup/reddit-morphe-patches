@@ -1,9 +1,9 @@
 {
-  "version": "0.4.0",
+  "version": "0.4.1",
   "patches": [
     {
       "name": "Reddit - Hide app posts",
-      "description": "Hides interactive app and game posts in listings.",
+      "description": "Hides interactive app and game posts in feeds.",
       "default": false,
       "category": null,
       "dependencies": [],

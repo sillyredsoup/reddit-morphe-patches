@@ -120,21 +120,17 @@ If the runtime directory is absent, install Google's command-line tools into
 install `platform-tools`, `emulator`, `build-tools;35.0.0`, and
 `system-images;android-30;google_apis;x86_64`.
 
-## Pending patch work (after environment setup)
+## Patch follow-up status
 
-- NSFW button intermittently ignores taps, possibly after long use. Capture
-  bottom navigation lifecycle and account-setting requests before changing it.
-- Games/apps occasionally escape the feed filter. Use an actual app post to
-  inspect its current listing model and filter path.
-- Extend the vertical viewer to subreddit and profile feeds with their own
-  ordering, visible position and pagination.
-- Move the filter setting below ads; label it **Hide apps in feed**, with no
-  subtitle.
-- Update the custom bottom navigation icons.
-- Give the NSFW button its own slot rather than replacing Inbox.
-- Synchronize the underlying feed position with the vertical viewer regardless
-  of whether subreddit links are added. Add a subreddit entry in the text overlay
-  so it is reachable after browsing several posts.
+- NSFW reliability and silent account updates: completed through v0.3.10.
+- Independent bottom-bar buttons and native icons: completed through v0.3.10.
+- Vertical viewer on native feeds, subreddit overlay and synchronized position:
+  completed in v0.4.0.
+- Interactive app filtering on modern post cards, saved startup setting and
+  **Hide apps in feed** after the Ads options, without a subtitle: v0.4.1.
+- Reported intermittent Home-to-profile viewer position: exact failure was not
+  reproduced; screen ancestry guard and fresh-profile focus regression added in
+  v0.4.1. Native Home-to-profile navigation and viewer round trip passed.
 
 ## NSFW reliability pass (2026-10-06)
 
@@ -204,3 +200,44 @@ NSFW's 18 diamond outlined when off and filled when on. Vertical's video icon
 renders correctly too. Both mode transitions received settings acknowledgements;
 no icon-render warnings or crashes were recorded. Mode restored to off. Private
 captures bar-off.png and bar-on.png contain only the navigation bar.
+
+## Interactive app filter pass (2026-10-06, v0.4.1)
+
+With all 18 default upstream patches and the three custom patches installed,
+the previous build displayed Hot & Cold interactive cards while hiding was
+enabled. Runtime tracing showed modern `ym1.u1` post cards containing
+`com.reddit.devplatform.feed.custompost.b`; these bypassed `Listing.getChildren`.
+The new converter hook removes the whole card. A runtime trace observed 63
+removed cards while retaining 19 other post conversions.
+
+Native UI checks verified the setting after Hide feed ads and before Navigation
+bar, with no subtitle. Turning it off, restarting and reopening r/HotAndCold
+displayed games; turning it on, restarting and scrolling hid games while ordinary
+discussion posts remained. Ten focused JVM checks also cover legacy children,
+modern cards, compact indicators, disabled startup settings and null conversions
+from other filters.
+
+## Home-to-profile vertical report (v0.4.1)
+
+The exact intermittent jump could not be reproduced. Static inspection confirms
+that focus and positions are keyed by each pager, with no shared last index. A
+fresh-profile regression now covers Home remembering a post also present in the
+profile: the profile starts at its own first media item. The feed resolver now
+requires the model's owning screen to descend from the current screen, rather
+than relying only on Activity identity and ON_SCREEN visibility. Runtime tracing
+confirmed BaseScreen.X4() is the parent link used by the embedded profile Posts
+screen.
+
+In the emulator, Home was advanced to feed section 9, then the media overlay's
+author was tapped to open their profile. Vertical opened SUBMITTED_POSTS at index
+0. Three upward swipes displayed four different titles; Back synchronized to the
+last selected profile post, and reopening kept that post. No AndroidRuntime
+exception was recorded. This checks the transition and the defensive guard; it
+does not establish the cause of the user's intermittent report.
+
+Tapping Home in the profile's bottom bar opened a second native Home feed with a
+different pager and Android Activity. Its first image differed from the original
+Home, as did the underlying native feed. A runtime map inspection confirmed
+separate entries: original Home retained section 9 and its original post ID;
+profile retained its own selected post, and the second Home had a different
+position and post. No shared position was found.

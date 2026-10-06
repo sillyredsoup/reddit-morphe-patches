@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.List;
 import java.util.Map;
@@ -155,12 +156,24 @@ public final class VerticalHomeFeed {
                 try {
                     // Profile's Posts/Saved panes are embedded screens rather than the nav-stack top.
                     Object owner = field(model, "U");
-                    if (activity(owner) == activity && "ON_SCREEN".equals(String.valueOf(
+                    if (belongsToScreen(owner, screen) && activity(owner) == activity && "ON_SCREEN".equals(String.valueOf(
                         call(field(model, "n0"), "getValue")))) return model;
                 } catch (ReflectiveOperationException | RuntimeException ignored) { }
             }
         }
         return null;
+    }
+
+    private static boolean belongsToScreen(Object owner, Object screen) {
+        if (screen == null) return false;
+        Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (owner != null && seen.add(owner)) {
+            if (owner == screen) return true;
+            // BaseScreen.X4() is the native parent screen. Activity and ON_SCREEN alone
+            // can also match the previous feed while navigation visibility catches up.
+            owner = call(owner, "X4");
+        }
+        return false;
     }
 
     public static String tabLabel(Object descriptor, String original) {

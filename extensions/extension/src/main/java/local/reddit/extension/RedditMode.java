@@ -2,6 +2,8 @@ package local.reddit.extension;
 
 import android.app.Activity;
 import android.content.res.Resources;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 import java.lang.ref.WeakReference;
@@ -23,6 +25,9 @@ public final class RedditMode {
     private static volatile String inboxLabel;
     private static volatile int nsfwLabelId;
     private static volatile boolean mode;
+    private static final Handler main = new Handler(Looper.getMainLooper());
+    private static SettingUpdate activeUpdate;
+    private static SettingUpdate queuedUpdate;
     private static final androidx.compose.runtime.o1 modeState =
         androidx.compose.runtime.j.B(Boolean.FALSE);
 
@@ -91,21 +96,28 @@ public final class RedditMode {
     }
 
     public static Function0<?> wrapClick(Object descriptor, Function0<?> original) {
+        if (original instanceof ModeClick) return original;
         try {
             String label = (String) descriptor.getClass().getField("a").get(descriptor);
             if ("NSFW".equals(label)) {
                 // Both Reddit bottom-bar implementations capture their owning screen
                 // in the original callback. A later bar can replace the global fallback.
                 Object owner = clickScreen(original);
-                return () -> {
-                    Object screen = owner != null ? owner : navScreen.get();
-                    if (screen != null) toggle(screen);
-                    else Log.w("RedditMode", "NSFW click has no navigation screen");
-                    return kotlinUnit();
-                };
+                return new ModeClick(owner);
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) { }
         return original;
+    }
+
+    private static final class ModeClick implements Function0<Object> {
+        final Object owner;
+        ModeClick(Object owner) { this.owner = owner; }
+        @Override public Object invoke() {
+            Object screen = owner != null ? owner : navScreen.get();
+            if (screen != null) toggle(screen);
+            else Log.w("RedditMode", "NSFW click has no navigation screen");
+            return kotlinUnit();
+        }
     }
 
     private static Object clickScreen(Function0<?> click) {
@@ -175,13 +187,14 @@ public final class RedditMode {
             // Reddit's over18 setter dispatches its local update asynchronously.
             // Toggle the mode shown by this button even if that getter still lags.
             boolean next = !mode;
-            set(repo, "y", next);
-            set(repo, "q", !next);
             setMode(next);
             current.getSharedPreferences(PREFS, 0).edit().putBoolean(NSFW_ONLY, mode).apply();
-            Toast.makeText(current, mode ? "NSFW mode on" : "NSFW mode off", Toast.LENGTH_SHORT).show();
-            refreshFeed(screen);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            Log.i("RedditMode", stateText(next) + " — updating account settings");
+            Toast.makeText(current, stateText(next) + " — updating account settings", Toast.LENGTH_SHORT).show();
+            SettingUpdate update = new SettingUpdate(repo, screen, next);
+            if (activeUpdate == null) update.start();
+            else queuedUpdate = update;
+        } catch (RuntimeException | LinkageError error) {
             Log.w("RedditMode", "NSFW settings update failed: " + error.getClass().getSimpleName());
             Toast.makeText(current, "Could not change NSFW settings", Toast.LENGTH_LONG).show();
         }
@@ -190,6 +203,144 @@ public final class RedditMode {
     private static void setMode(boolean enabled) {
         mode = enabled;
         modeState.setValue(enabled);
+    }
+
+    private static String stateText(boolean enabled) {
+        return enabled ? "NSFW mode on" : "NSFW mode off";
+    }
+
+    /** Observe F(), the request that actually receives Reddit's server response.
+     * The over18 setter itself discards an unsuccessful F() result.
+     */
+    public static a<Object> watchSettingsSync(Object repo, Object patch, a<Object> original) {
+        Completion owner = findCompletion(original, 0,
+            Collections.newSetFromMap(new IdentityHashMap<>()));
+        if (owner == null || owner.update.repo != repo) return original;
+        try {
+            Object over18 = patch.getClass().getMethod("getOver18").invoke(patch);
+            Object blur = patch.getClass().getMethod("getNoProfanity").invoke(patch);
+            int fields = 0;
+            if (Boolean.valueOf(owner.update.target).equals(over18)) fields |= 1;
+            if (Boolean.valueOf(!owner.update.target).equals(blur)) fields |= 2;
+            if (fields != 0) return new SyncCompletion(original, owner.update, fields);
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            main.post(() -> owner.update.finish(false, "account update could not be checked"));
+        }
+        return original;
+    }
+
+    private static Completion findCompletion(Object value, int depth, Set<Object> seen) {
+        if (value == null || depth > 16 || !seen.add(value)) return null;
+        if (value instanceof Completion) return (Completion) value;
+        // withContext introduces coroutine frames in addition to Kotlin's base
+        // completion field. Follow only Continuation fields, not application data.
+        for (Class<?> type = value.getClass(); type != null; type = type.getSuperclass()) {
+            for (Field field : type.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) || !a.class.isAssignableFrom(field.getType())) continue;
+                try {
+                    field.setAccessible(true);
+                    Completion found = findCompletion(field.get(value), depth + 1, seen);
+                    if (found != null) return found;
+                } catch (ReflectiveOperationException | RuntimeException ignored) { }
+            }
+        }
+        return null;
+    }
+
+    /** F() can return immediately instead of resuming its continuation. */
+    public static void finishSettingsSync(a<?> continuation, Object result) {
+        if (continuation instanceof SyncCompletion && !suspended(result))
+            ((SyncCompletion) continuation).received(result);
+    }
+
+    private static boolean suspended(Object result) {
+        return result instanceof Enum<?> && "COROUTINE_SUSPENDED".equals(((Enum<?>) result).name());
+    }
+
+    private static boolean success(Object result) {
+        // F() returns hx.g(Unit) only after a successful response; hx.b is failure.
+        return result != null && "hx.g".equals(result.getClass().getName());
+    }
+
+    private static final class SettingUpdate {
+        final Object repo;
+        final WeakReference<Object> screen;
+        final boolean target;
+        int completedFields;
+        boolean rejected;
+        boolean finished;
+        final Runnable timeout = () -> finish(false, "account update timed out");
+
+        SettingUpdate(Object repo, Object screen, boolean target) {
+            this.repo = repo;
+            this.screen = new WeakReference<>(screen);
+            this.target = target;
+        }
+
+        void start() {
+            activeUpdate = this;
+            main.postDelayed(timeout, 30000);
+            try {
+                set(repo, "y", target, this);
+                set(repo, "q", !target, this);
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+                Log.w("RedditMode", "NSFW settings update failed: " + error.getClass().getSimpleName());
+                finish(false, "account update failed");
+            }
+        }
+
+        void received(int fields, Object result) {
+            if (finished || activeUpdate != this) return;
+            if ((completedFields & fields) == fields) return;
+            Log.i("RedditMode", stateText(target) + " account sync " + fields +
+                (success(result) ? " acknowledged" : " rejected"));
+            completedFields |= fields;
+            rejected |= !success(result);
+            // Even after rejection, let the other request finish before starting
+            // a queued mode so it cannot overwrite that mode's blur setting later.
+            if (completedFields == 3) finish(!rejected,
+                rejected ? "account update failed" : "account settings confirmed");
+        }
+
+        void finish(boolean confirmed, String message) {
+            if (finished || activeUpdate != this) return;
+            finished = true;
+            main.removeCallbacks(timeout);
+            activeUpdate = null;
+            SettingUpdate next = queuedUpdate;
+            queuedUpdate = null;
+            if (next != null) {
+                next.start();
+                return;
+            }
+            Object owner = screen.get();
+            if (owner == null) return;
+            try {
+                Activity activity = (Activity) owner.getClass().getMethod("H3").invoke(owner);
+                if (activity == null) return;
+                Log.i("RedditMode", stateText(target) + " — " + message);
+                Toast.makeText(activity, stateText(target) + " — " + message, Toast.LENGTH_SHORT).show();
+                if (confirmed) refreshFeed(owner);
+            } catch (ReflectiveOperationException | RuntimeException ignored) { }
+            if (!confirmed) Log.w("RedditMode", "NSFW " + message);
+        }
+    }
+
+    private static final class SyncCompletion implements a<Object> {
+        final a<Object> original;
+        final SettingUpdate update;
+        final int fields;
+        SyncCompletion(a<Object> original, SettingUpdate update, int fields) {
+            this.original = original;
+            this.update = update;
+            this.fields = fields;
+        }
+        @Override public CoroutineContext getContext() { return original.getContext(); }
+        void received(Object result) { main.post(() -> update.received(fields, result)); }
+        @Override public void resumeWith(Object result) {
+            received(result);
+            original.resumeWith(result);
+        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -273,14 +424,16 @@ public final class RedditMode {
         return null;
     }
 
-    private static void set(Object repo, String name, boolean value) throws ReflectiveOperationException {
+    private static void set(Object repo, String name, boolean value, SettingUpdate update)
+        throws ReflectiveOperationException {
         for (Method method : repo.getClass().getMethods()) {
             if (!method.getName().equals(name) || method.getParameterTypes().length != 2
                 || method.getParameterTypes()[0] != boolean.class) continue;
-            a<Object> completion = new Completion();
+            Completion completion = new Completion(update, name.equals("y") ? 1 : 2);
             Object continuation = name.equals("q")
                 ? new LambdaCompletion(completion) : new ImplCompletion(completion);
-            method.invoke(repo, value, continuation);
+            Object result = method.invoke(repo, value, continuation);
+            if (!suspended(result)) completion.resumeWith(result);
             return;
         }
         throw new NoSuchMethodException(name);
@@ -295,8 +448,13 @@ public final class RedditMode {
     }
 
     private static final class Completion implements a<Object> {
+        final SettingUpdate update;
+        final int fields;
+        Completion(SettingUpdate update, int fields) { this.update = update; this.fields = fields; }
         @Override public CoroutineContext getContext() { return EmptyCoroutineContext.INSTANCE; }
-        @Override public void resumeWith(Object result) { }
+        @Override public void resumeWith(Object result) {
+            if (!success(result)) main.post(() -> update.received(fields, result));
+        }
     }
 
     private static final class ImplCompletion extends ContinuationImpl {

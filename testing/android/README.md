@@ -148,3 +148,31 @@ empty crash buffer and no RedditMode warnings. App left on Home in SFW mode.
 The reported intermittent long-session failure was not reproduced. The changes
 address demonstrated failure paths; they are not confirmation that this specific
 report is resolved. New warnings can be captured with capture.sh if it recurs.
+
+## Account acknowledgements (v0.3.8)
+
+The user confirmed that v0.3.7 fixes visiting a profile followed by a broken
+NSFW button. The click wrapper now also preserves that screen binding if Compose
+passes it through the hook again during a redraw.
+
+Each tap changes the local filter and shows an updating-account-settings toast.
+RedditModePatch observes the preference repository's F() sync call, preserving
+the original coroutine continuation/context. Only successful server results for
+both over18 and noProfanity produce a confirmed toast and refresh. The over18
+setter's own return cannot establish this: it discards an unsuccessful sync result.
+
+Taps during an update queue the latest desired mode; an obsolete update does not
+show a confirmation or refresh the feed. A rejected update waits for its other
+request to finish before starting the queued mode. A 30-second timeout releases
+the pending update and reports failure. Local filter state remains the requested
+state on failure; the toast does not claim the account state matches it.
+
+Focused JVM checks cover owner replacement, repeated wrapping, lagging account
+state, immediate/asynchronous acknowledgements, rejection, queued reversal,
+queued reversal after rejection, and timeout/late replies.
+
+The final v0.3.8 APK applied all 21 patches without failures. An authenticated
+emulator run observed real F() acknowledgements for both settings when turning
+mode on and off, with no crashes. Screenshots/OCR captured the pending and
+confirmed messages; diagnostics are private under .android-testing. The final
+release extension fingerprint matches the extension used for that APK.

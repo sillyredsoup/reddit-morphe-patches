@@ -175,6 +175,32 @@ public final class RedditModePatch {
                         - parameterWords(repositoryInit) - 1;
                     beforeReturns(repositoryInit, call(EXT, "rememberRepository", "V",
                         Collections.singletonList("Ljava/lang/Object;"), repoThis));
+
+                    MutableMethod sync = one(repository, "F", "Ljava/lang/Object;", 2);
+                    if (!"Lcom/reddit/domain/model/AccountPreferencesPatch;".contentEquals(sync.getParameterTypes().get(0))
+                        || !"Lwl3/a;".contentEquals(sync.getParameterTypes().get(1)))
+                        throw new IllegalStateException("Account sync parameters changed");
+                    int syncThis = sync.getImplementation().getRegisterCount() - 3;
+                    if (sync.getImplementation().getRegisterCount() > 16)
+                        throw new IllegalStateException("Account sync register shape changed");
+                    sync.getImplementation().addInstruction(0,
+                        new BuilderInstruction3rc(Opcode.INVOKE_STATIC_RANGE, syncThis, 3,
+                            new ImmutableMethodReference(EXT, "watchSettingsSync",
+                                Arrays.asList("Ljava/lang/Object;", "Ljava/lang/Object;", "Lwl3/a;"), "Lwl3/a;")));
+                    sync.getImplementation().addInstruction(1,
+                        new BuilderInstruction11x(Opcode.MOVE_RESULT_OBJECT, syncThis + 2));
+                    List<Instruction> syncCode = new ArrayList<>(sync.getImplementation().getInstructions());
+                    int syncReturns = 0;
+                    for (int i = syncCode.size() - 1; i >= 0; i--) {
+                        if (syncCode.get(i).getOpcode() != Opcode.RETURN_OBJECT) continue;
+                        int result = ((OneRegisterInstruction) syncCode.get(i)).getRegisterA();
+                        sync.getImplementation().addInstruction(i,
+                            new BuilderInstruction35c(Opcode.INVOKE_STATIC, 2, syncThis + 2, result, 0, 0, 0,
+                                new ImmutableMethodReference(EXT, "finishSettingsSync",
+                                    Arrays.asList("Lwl3/a;", "Ljava/lang/Object;"), "V")));
+                        syncReturns++;
+                    }
+                    if (syncReturns != 1) throw new IllegalStateException("Account sync return shape changed");
                     return Unit.INSTANCE;
                 });
                 return Unit.INSTANCE;
